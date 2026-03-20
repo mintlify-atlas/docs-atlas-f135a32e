@@ -1,0 +1,148 @@
+{
+  "projectType": "cli-tool",
+  "projectName": "Docker Agent",
+  "projectDescription": "A Docker CLI plugin for building, running, and sharing AI agents using declarative YAML configuration with multi-agent orchestration and a rich tool ecosystem.",
+  "theme": "aspen",
+  "primaryColor": "#1D63ED",
+  "lightColor": "#EBF2FF",
+  "darkColor": "#0A2E6E",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "getting-started/installation",
+              "getting-started/quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/agents",
+              "concepts/models",
+              "concepts/tools",
+              "concepts/multi-agent"
+            ]
+          },
+          {
+            "group": "Features",
+            "pages": [
+              "features/tui",
+              "features/cli",
+              "features/mcp-mode",
+              "features/rag",
+              "features/skills",
+              "features/a2a",
+              "features/acp",
+              "features/api-server",
+              "features/evaluation"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/overview",
+              "configuration/agents",
+              "configuration/models",
+              "configuration/tools",
+              "configuration/hooks",
+              "configuration/permissions",
+              "configuration/routing",
+              "configuration/sandbox",
+              "configuration/structured-output"
+            ]
+          },
+          {
+            "group": "Built-in Tools",
+            "pages": [
+              "tools/filesystem",
+              "tools/shell",
+              "tools/memory",
+              "tools/think",
+              "tools/todo",
+              "tools/fetch",
+              "tools/script",
+              "tools/user-prompt",
+              "tools/background-agents",
+              "tools/handoff",
+              "tools/transfer-task",
+              "tools/a2a",
+              "tools/api",
+              "tools/lsp"
+            ]
+          },
+          {
+            "group": "Model Providers",
+            "pages": [
+              "providers/overview",
+              "providers/openai",
+              "providers/anthropic",
+              "providers/google",
+              "providers/bedrock",
+              "providers/dmr",
+              "providers/mistral",
+              "providers/xai",
+              "providers/nebius",
+              "providers/minimax",
+              "providers/local",
+              "providers/custom"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/go-sdk",
+              "guides/tips"
+            ]
+          },
+          {
+            "group": "Community",
+            "pages": [
+              "community/contributing",
+              "community/telemetry",
+              "community/troubleshooting"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Declarative YAML agent configuration with versioned schema (v0-v7)",
+    "Multi-agent orchestration with coordinator and specialized sub-agents",
+    "Rich built-in tool ecosystem (filesystem, shell, memory, think, RAG, and more)",
+    "MCP (Model Context Protocol) server support — local, remote, and Docker-based",
+    "AI provider agnostic — OpenAI, Anthropic, Gemini, AWS Bedrock, Docker Model Runner, and more",
+    "Interactive TUI for live sessions and --exec mode for scripting/pipelines",
+    "Package and share agents via OCI registries (like container images)",
+    "MCP server mode — expose agents as MCP tools for other clients",
+    "Agent-to-Agent (A2A) protocol support for interoperable multi-agent systems",
+    "RAG with BM25, embeddings, hybrid search, and reranking",
+    "Skills system for reusable agent behavior and tool instruction injection",
+    "Sandboxed execution via Docker Desktop sandbox integration",
+    "Hooks for lifecycle events (session start/stop, tool calls, post-edit)",
+    "HTTP API server mode for programmatic integration"
+  ],
+  "publicApiSurface": [
+    "docker agent run [<agent-file>|<registry-ref>] [message]",
+    "docker agent run --exec <agent-file> [message] (non-interactive)",
+    "docker agent new [--model provider/model]",
+    "docker agent share push <agent.yaml> <namespace/repo>",
+    "docker agent share pull <namespace/repo>",
+    "docker agent serve mcp <agent.yaml>",
+    "docker agent serve a2a <agent.yaml>",
+    "docker agent serve api",
+    "docker agent eval <agent.yaml>",
+    "docker agent debug auth",
+    "docker-agent run --agent <name> (select agent from multi-agent config)",
+    "docker-agent run --model provider/model (override model at runtime)",
+    "docker-agent run --yolo (auto-approve all tool calls)",
+    "docker-agent run --sandbox (run inside Docker sandbox)",
+    "docker-agent run --session <id> (resume previous session)",
+    "docker-agent run --remote <address> (use remote runtime)"
+  ]
+}
