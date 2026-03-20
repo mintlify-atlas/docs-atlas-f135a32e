@@ -31,9 +31,12 @@ agents:
 Add a default model to `~/.config/cagent/config.yaml` so you don't have to specify it every time:
 
 ```yaml
-settings:
-  default_model: anthropic/claude-sonnet-4-0
+default_model: anthropic/claude-sonnet-4-0
 ```
+
+The `default_model` field lives at the root of the config file (not nested under `settings`).
+
+You can also set it via environment variable: `DOCKER_AGENT_DEFAULT_MODEL=anthropic/claude-sonnet-4-0`.
 
 ### Model aliases are pinned automatically
 

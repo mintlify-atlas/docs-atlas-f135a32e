@@ -123,6 +123,12 @@ docker agent serve api <agent-file>|<agents-dir> [flags]
 | `-l, --listen <addr>` | Address to listen on (default: `127.0.0.1:8080`) |
 | `-s, --session-db <path>` | Path to the session database (default: `session.db`) |
 | `--pull-interval <mins>` | Auto-pull OCI reference every N minutes (0 = disabled) |
+| `--fake <path>` | Replay AI responses from a cassette file (for testing) |
+| `--record <path>` | Record AI API interactions to a cassette file |
+
+<Note>
+  `--fake` and `--record` are mutually exclusive. `--pull-interval` only works with OCI references, not local files.
+</Note>
 
 See [API Server](/features/api-server) for endpoint details.
 
@@ -205,32 +211,83 @@ See [Evaluation](/features/evaluation) for how to write eval files.
 
 Share agents via OCI registries.
 
-```bash
-# Push an agent
-docker agent share push ./agent.yaml docker.io/username/my-agent:latest
+### `docker agent share push`
 
-# Pull an agent
-docker agent share pull docker.io/username/my-agent:latest
+```bash
+docker agent share push <agent-file> <registry-ref>
 ```
+
+```bash
+docker agent share push ./agent.yaml docker.io/username/my-agent:latest
+```
+
+### `docker agent share pull`
+
+```bash
+docker agent share pull <registry-ref> [flags]
+```
+
+| Flag | Description |
+| ---- | ----------- |
+| `--force` | Force pull even if the configuration already exists locally |
+
+```bash
+docker agent share pull docker.io/username/my-agent:latest
+docker agent share pull agentcatalog/pirate --force
+```
+
+The agent YAML is saved to the current directory as `<registry-ref>.yaml` (with `/` replaced by `_`).
 
 ## `docker agent alias`
 
 Manage agent aliases for quick access.
 
-```bash
-# List aliases
-docker agent alias ls
+### `docker agent alias add`
 
+```bash
+docker agent alias add <alias-name> <agent-path> [flags]
+```
+
+| Flag | Description |
+| ---- | ----------- |
+| `--yolo` | Auto-approve all tool calls when using this alias |
+| `--model <ref>` | Override the agent's model (format: `[agent=]provider/model`) |
+| `--hide-tool-results` | Hide tool call results when using this alias |
+
+Alias names must start with a letter or digit and contain only letters, digits, hyphens, and underscores.
+
+### `docker agent alias list` / `ls`
+
+```bash
+docker agent alias list
+docker agent alias ls
+```
+
+### `docker agent alias remove` / `rm`
+
+```bash
+docker agent alias remove <alias-name>
+docker agent alias rm <alias-name>
+```
+
+```bash
 # Add an alias
 docker agent alias add pirate /path/to/pirate.yaml
 docker agent alias add yolo-coder agentcatalog/coder --yolo
 docker agent alias add fast-coder agentcatalog/coder --model openai/gpt-4o-mini
+docker agent alias add quiet agentcatalog/coder --hide-tool-results
+
+# List aliases
+docker agent alias list
+
+# Remove an alias
+docker agent alias remove pirate
 
 # Use an alias
 docker agent run pirate
 ```
 
-Alias options (`--yolo`, `--model`) apply automatically when the alias is used. Command-line flags override alias options.
+Alias options (`--yolo`, `--model`, `--hide-tool-results`) apply automatically when the alias is used. Command-line flags override alias options.
 
 <Tip>
   Create a `default` alias to customize what `docker agent` launches with no arguments:
@@ -250,12 +307,33 @@ docker agent version
 
 ## Global flags
 
+These flags are available on all commands:
+
 | Flag | Description |
 | ---- | ----------- |
 | `-d, --debug` | Enable debug logging (default output: `~/.cagent/cagent.debug.log`) |
-| `--log-file <path>` | Custom debug log location |
+| `--log-file <path>` | Custom debug log location (only used with `--debug`) |
 | `-o, --otel` | Enable OpenTelemetry tracing |
+| `--cache-dir <path>` | Override the cache directory |
+| `--config-dir <path>` | Override the config directory (default: `~/.config/cagent`) |
+| `--data-dir <path>` | Override the data directory (default: `~/.cagent`) |
 | `--help` | Show help for any command |
+
+## Runtime config flags
+
+These flags are available on `run`, `new`, `eval`, and all `serve` subcommands:
+
+| Flag | Description |
+| ---- | ----------- |
+| `--models-gateway <url>` | Set the models gateway address (env: `DOCKER_AGENT_MODELS_GATEWAY`) |
+| `--env-from-file <path>` | Set environment variables from a file (repeatable) |
+| `--working-dir <path>` | Set the working directory for the session |
+| `--code-mode-tools` | Provide a single tool to call other tools via JavaScript |
+| `--hook-pre-tool-use <cmd>` | Add a pre-tool-use hook command (repeatable) |
+| `--hook-post-tool-use <cmd>` | Add a post-tool-use hook command (repeatable) |
+| `--hook-session-start <cmd>` | Add a session-start hook command (repeatable) |
+| `--hook-session-end <cmd>` | Add a session-end hook command (repeatable) |
+| `--hook-on-user-input <cmd>` | Add an on-user-input hook command (repeatable) |
 
 ## Agent references
 

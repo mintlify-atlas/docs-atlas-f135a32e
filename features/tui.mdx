@@ -25,14 +25,26 @@ docker agent run agent.yaml --debug
 | -------- | ------ |
 | `Ctrl+K` | Open command palette |
 | `Ctrl+M` | Switch model |
-| `Ctrl+R` | Reverse history search |
-| `Ctrl+L` | Start audio listening mode (voice input) |
+| `Ctrl+R` | Incremental history search |
+| `Ctrl+Y` | Toggle yolo (auto-approve) mode |
+| `Ctrl+O` | Toggle hide tool results |
+| `Ctrl+S` | Cycle to next agent |
+| `Ctrl+B` | Toggle sidebar |
+| `Ctrl+G` | Open external editor |
 | `Ctrl+Z` | Suspend TUI to background (resume with `fg`) |
 | `Ctrl+X` | Clear queued messages |
+| `Ctrl+T` | New tab |
+| `Ctrl+N` | Next tab |
+| `Ctrl+P` | Previous tab |
+| `Ctrl+W` | Close tab |
 | `Escape` | Cancel current operation |
 | `Enter` | Send message |
-| `Shift+Enter` | Insert newline |
-| `Up`/`Down` | Navigate message history |
+| `Shift+Enter` | Insert newline (or `Ctrl+J` as fallback) |
+| `Tab` | Switch focus between content and editor |
+
+<Note>
+  Voice input (`/speak`) is available as a slash command on macOS only, using the system microphone via the OpenAI transcription API.
+</Note>
 
 ## Slash commands
 
@@ -41,20 +53,25 @@ Type `/` during a session to see available commands, or press `Ctrl+K` for the c
 | Command | Description |
 | ------- | ----------- |
 | `/new` | Start a new conversation |
-| `/compact` | Summarize and compact the conversation history |
+| `/compact` | Summarize the current conversation (optional: `/compact [instructions]`) |
 | `/copy` | Copy the conversation to clipboard |
-| `/export` | Export the session as HTML |
+| `/copy-last` | Copy the last assistant response to clipboard |
+| `/export` | Export the session as HTML (optional: `/export [filename]`) |
 | `/sessions` | Browse and load past sessions |
 | `/model` | Change the model for the current agent |
 | `/theme` | Change the color theme |
 | `/yolo` | Toggle automatic tool call approval |
-| `/title` | Set or regenerate session title |
-| `/attach` | Attach a file to your message |
-| `/shell` | Open a shell |
-| `/star` | Star/unstar the current session |
-| `/cost` | Show cost breakdown for this session |
-| `/eval` | Create an evaluation report |
+| `/permissions` | Show tool permission rules for this session |
+| `/title` | Set or regenerate session title (optional: `/title [new title]`) |
+| `/attach` | Attach a file to your message (optional: `/attach [path]`) |
+| `/shell` | Start a shell |
+| `/star` | Toggle star on current session |
+| `/split-diff` | Toggle split diff view mode |
+| `/cost` | Show detailed cost breakdown for this session |
+| `/eval` | Create an evaluation report (optional: `/eval [filename]`) |
 | `/exit` | Exit the application |
+| `/quit` or `/q` | Quit the application (aliases for `/exit`) |
+| `/speak` | Start speech-to-text transcription (macOS only) |
 
 ## File attachments
 
@@ -106,6 +123,28 @@ Or click the pencil icon next to the title in the sidebar.
 ## Runtime model switching
 
 Change the AI model mid-session with `/model` or `Ctrl+M`. Select from config models or type a custom `provider/model` string. The switch is saved with the session and restored on reload.
+
+## Multi-session tabs
+
+Run multiple agent sessions simultaneously in separate tabs within the same TUI window.
+
+| Action | Shortcut |
+| ------ | -------- |
+| New tab | `Ctrl+T` |
+| Next tab | `Ctrl+N` |
+| Previous tab | `Ctrl+P` |
+| Close tab | `Ctrl+W` |
+
+Each tab has an independent conversation, model, and working directory. Tabs can be restored on next launch by enabling `restore_tabs` in your user config.
+
+<Tip>
+  Enable tab restoration in `~/.config/cagent/config.yaml`:
+
+  ```yaml
+  settings:
+    restore_tabs: true
+  ```
+</Tip>
 
 ## Editable messages
 
