@@ -1,0 +1,154 @@
+---
+title: "Docker Model Runner"
+description: "Run AI models locally with Docker — no API keys, no costs, full data privacy."
+---
+
+Docker Model Runner (DMR) lets you run open-source AI models directly on your machine using Docker. No API key is needed and no data leaves your computer.
+
+<Note>
+  DMR runs models locally — your data never leaves your machine. It is ideal for development, sensitive data, or offline use.
+</Note>
+
+## Prerequisites
+
+1. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) and enable the Model Runner feature in Docker Desktop settings.
+2. Verify it is running:
+
+```bash
+docker model status --json
+```
+
+## Pulling models
+
+Pull models from Docker Hub before running them:
+
+```bash
+docker model pull ai/qwen3
+docker model pull ai/llama3.2
+```
+
+List available models:
+
+```bash
+docker model ls
+```
+
+## Configuration
+
+<Tabs>
+  <Tab title="Inline">
+    ```yaml
+    agents:
+      root:
+        model: dmr/ai/qwen3
+    ```
+  </Tab>
+  <Tab title="Named model">
+    ```yaml
+    models:
+      local:
+        provider: dmr
+        model: ai/qwen3
+        max_tokens: 8192
+
+    agents:
+      root:
+        model: local
+        description: Local assistant
+        instruction: You are a helpful assistant.
+    ```
+  </Tab>
+</Tabs>
+
+## Available models
+
+Any model available through Docker Model Runner can be used. Common options:
+
+| Model | Description |
+| --- | --- |
+| `ai/qwen3` | Qwen 3 — versatile, good for coding and general tasks |
+| `ai/llama3.2` | Llama 3.2 — Meta's open-source model |
+
+See the Docker Hub model catalog for the full list of available models.
+
+## Runtime flags
+
+Pass flags directly to the underlying llama.cpp inference runtime using `provider_opts.runtime_flags`:
+
+```yaml
+models:
+  local:
+    provider: dmr
+    model: ai/qwen3
+    max_tokens: 8192
+    provider_opts:
+      runtime_flags: ["--ngl=33", "--top-p=0.9"]
+```
+
+A single string is also accepted:
+
+```yaml
+provider_opts:
+  runtime_flags: "--ngl=33 --top-p=0.9"
+```
+
+### Parameter mapping
+
+docker-agent model config fields map automatically to llama.cpp flags. `runtime_flags` take priority over derived flags on conflict.
+
+| Config field | llama.cpp flag |
+| --- | --- |
+| `temperature` | `--temp` |
+| `top_p` | `--top-p` |
+| `frequency_penalty` | `--frequency-penalty` |
+| `presence_penalty` | `--presence-penalty` |
+| `max_tokens` | `--context-size` |
+
+## Speculative decoding
+
+Use a smaller draft model to predict tokens ahead for faster inference:
+
+```yaml
+models:
+  fast-local:
+    provider: dmr
+    model: ai/qwen3:14B
+    max_tokens: 8192
+    provider_opts:
+      speculative_draft_model: ai/qwen3:0.6B-F16
+      speculative_num_tokens: 16
+      speculative_acceptance_rate: 0.8
+```
+
+The draft model should be a smaller, faster variant of the main model.
+
+## Custom endpoint
+
+By default, docker-agent auto-discovers the DMR endpoint. Set `base_url` manually if needed:
+
+```yaml
+models:
+  local:
+    provider: dmr
+    model: ai/qwen3
+    base_url: http://127.0.0.1:12434/engines/llama.cpp/v1
+```
+
+<Note>
+  If you are running docker-agent itself inside a Docker container, use `http://model-runner.docker.internal/engines/v1` as the base URL.
+</Note>
+
+## Local inference benefits
+
+- **No API costs** — models run on your hardware.
+- **Data privacy** — data stays on your machine and never reaches external servers.
+- **Offline capable** — works without an internet connection after the model is pulled.
+- **Consistent performance** — no rate limits or external service outages.
+
+## Troubleshooting
+
+**Plugin not found:** Ensure Docker Model Runner is enabled in Docker Desktop settings. docker-agent will attempt to fall back to the default URL.
+
+**Endpoint empty:** Verify the Model Runner is running with `docker model status --json`.
+
+**Slow performance:** Use `runtime_flags` to tune GPU layers (`--ngl`) and thread count (`--threads`).

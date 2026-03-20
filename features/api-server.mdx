@@ -1,0 +1,148 @@
+---
+title: "API Server"
+description: "Expose your agents via an HTTP API for programmatic access, web frontends, and integrations."
+---
+
+The `docker agent serve api` command starts an HTTP server that exposes your agents through a REST-style API with Server-Sent Events (SSE) streaming.
+
+## Starting the server
+
+```bash
+# Start with a local config
+docker agent serve api agent.yaml
+
+# Custom listen address
+docker agent serve api agent.yaml --listen 0.0.0.0:8080
+
+# With explicit session database
+docker agent serve api agent.yaml --session-db ./sessions.db
+
+# Auto-refresh from OCI registry every 10 minutes
+docker agent serve api agentcatalog/coder --pull-interval 10
+```
+
+### Flags
+
+| Flag | Default | Description |
+| ---- | ------- | ----------- |
+| `-l, --listen <addr>` | `127.0.0.1:8080` | Address to listen on |
+| `-s, --session-db <path>` | `session.db` | Path to the SQLite session database |
+| `--pull-interval <mins>` | `0` (disabled) | Auto-pull OCI reference every N minutes |
+| `--working-dir <path>` | (current dir) | Working directory for sessions |
+
+## Endpoints
+
+All endpoints are under the `/api` prefix.
+
+### Agents
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| `GET` | `/api/agents` | List all available agents |
+| `GET` | `/api/agents/:id` | Get a specific agent's configuration |
+
+### Sessions
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| `GET` | `/api/sessions` | List all sessions |
+| `POST` | `/api/sessions` | Create a new session |
+| `GET` | `/api/sessions/:id` | Get a session by ID (messages, tokens, permissions) |
+| `DELETE` | `/api/sessions/:id` | Delete a session |
+| `PATCH` | `/api/sessions/:id/title` | Update the session title |
+| `PATCH` | `/api/sessions/:id/permissions` | Update session permissions |
+| `POST` | `/api/sessions/:id/resume` | Resume a paused session (after tool confirmation) |
+| `POST` | `/api/sessions/:id/tools/toggle` | Toggle auto-approve (YOLO) mode |
+| `POST` | `/api/sessions/:id/elicitation` | Respond to an MCP tool elicitation request |
+
+### Agent execution
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| `POST` | `/api/sessions/:id/agent/:agent` | Run the root agent (SSE stream) |
+| `POST` | `/api/sessions/:id/agent/:agent/:name` | Run a specific named agent (SSE stream) |
+
+### Health
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| `GET` | `/api/ping` | Health check — returns `{"status": "ok"}` |
+
+## Streaming responses
+
+Agent execution endpoints return **Server-Sent Events (SSE)**. Each event is a JSON object:
+
+```bash
+# Create a session
+SID=$(curl -s -X POST http://localhost:8080/api/sessions \
+  -H "Content-Type: application/json" \
+  -d '{"agent": "root"}' | jq -r '.id')
+
+# Run the agent (SSE stream)
+curl -N -X POST http://localhost:8080/api/sessions/$SID/agent/root \
+  -H "Content-Type: application/json" \
+  -d '[{"role": "user", "content": "Hello!"}]'
+```
+
+Example SSE response:
+
+```
+data: {"type":"stream_started","session_id":"...","agent":"root"}
+data: {"type":"agent_choice","content":"Hello! How","agent":"root"}
+data: {"type":"agent_choice","content":" can I help","agent":"root"}
+data: {"type":"agent_choice","content":" you today?","agent":"root"}
+data: {"type":"stream_end","session_id":"..."}
+```
+
+## Integration patterns
+
+<Tabs>
+  <Tab title="Web frontend">
+    Build a chat UI that creates sessions via `POST /api/sessions`, then streams responses using the EventSource API:
+
+    ```javascript
+    const response = await fetch(`/api/sessions/${sessionId}/agent/root`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify([{ role: 'user', content: userMessage }]),
+    });
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const text = decoder.decode(value);
+      // Parse SSE events and update UI
+    }
+    ```
+  </Tab>
+  <Tab title="CI/CD pipeline">
+    Use the API to run agents as part of automated workflows:
+
+    ```bash
+    # Start the server in the background
+    docker agent serve api agent.yaml &
+    sleep 2
+
+    # Create a session and run the agent
+    SID=$(curl -s -X POST http://localhost:8080/api/sessions \
+      -H "Content-Type: application/json" \
+      -d '{}' | jq -r '.id')
+
+    curl -s -X POST http://localhost:8080/api/sessions/$SID/agent/root \
+      -H "Content-Type: application/json" \
+      -d '[{"role": "user", "content": "Review the PR changes"}]'
+    ```
+  </Tab>
+  <Tab title="OCI registry">
+    Serve an agent from a registry with auto-refresh:
+
+    ```bash
+    # Serves the agent and re-pulls every 5 minutes
+    docker agent serve api docker.io/myorg/my-agent:latest \
+      --pull-interval 5 \
+      --listen 0.0.0.0:8080
+    ```
+  </Tab>
+</Tabs>

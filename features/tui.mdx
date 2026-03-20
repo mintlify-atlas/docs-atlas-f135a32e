@@ -1,0 +1,188 @@
+---
+title: "Terminal UI (TUI)"
+description: "Docker Agent's default interface is a rich, interactive terminal UI with file attachments, themes, session management, and more."
+---
+
+## Launching the TUI
+
+```bash
+# Launch with a config
+docker agent run agent.yaml
+
+# Start with an initial message
+docker agent run agent.yaml "Help me refactor this code"
+
+# Auto-approve all tool calls
+docker agent run agent.yaml --yolo
+
+# Enable debug logging
+docker agent run agent.yaml --debug
+```
+
+## Keyboard shortcuts
+
+| Shortcut | Action |
+| -------- | ------ |
+| `Ctrl+K` | Open command palette |
+| `Ctrl+M` | Switch model |
+| `Ctrl+R` | Reverse history search |
+| `Ctrl+L` | Start audio listening mode (voice input) |
+| `Ctrl+Z` | Suspend TUI to background (resume with `fg`) |
+| `Ctrl+X` | Clear queued messages |
+| `Escape` | Cancel current operation |
+| `Enter` | Send message |
+| `Shift+Enter` | Insert newline |
+| `Up`/`Down` | Navigate message history |
+
+## Slash commands
+
+Type `/` during a session to see available commands, or press `Ctrl+K` for the command palette:
+
+| Command | Description |
+| ------- | ----------- |
+| `/new` | Start a new conversation |
+| `/compact` | Summarize and compact the conversation history |
+| `/copy` | Copy the conversation to clipboard |
+| `/export` | Export the session as HTML |
+| `/sessions` | Browse and load past sessions |
+| `/model` | Change the model for the current agent |
+| `/theme` | Change the color theme |
+| `/yolo` | Toggle automatic tool call approval |
+| `/title` | Set or regenerate session title |
+| `/attach` | Attach a file to your message |
+| `/shell` | Open a shell |
+| `/star` | Star/unstar the current session |
+| `/cost` | Show cost breakdown for this session |
+| `/eval` | Create an evaluation report |
+| `/exit` | Exit the application |
+
+## File attachments
+
+Attach file contents to your messages using the `@` trigger:
+
+<Steps>
+  <Step title="Type @ to open the file menu">
+    The file completion menu opens and respects `.gitignore`.
+  </Step>
+  <Step title="Start typing to filter files">
+    Type to narrow the list, then select a file.
+  </Step>
+  <Step title="The reference is inserted">
+    The UI shows the reference; the agent receives the full file contents in a structured `<attachments>` block.
+  </Step>
+</Steps>
+
+```bash
+# Example: in the chat input
+Explain what the code in @pkg/agent/agent.go does
+```
+
+## Session management
+
+Docker Agent automatically saves sessions. Use `/sessions` to browse past conversations.
+
+- **Browse** past sessions with search and filtering
+- **Star** important sessions with `/star`
+- **Branch** conversations by editing any previous user message — the original history is preserved
+- **Resume** a session with `docker agent run config.yaml --session <id>`
+- **Relative refs**: `--session -1` for the last session, `-2` for the one before
+
+### Session title editing
+
+Titles are auto-generated from your first message. Override them at any time:
+
+```bash
+# In the chat input:
+/title                     # Regenerate title using AI
+/title My Custom Title     # Set a specific title
+```
+
+Or click the pencil icon next to the title in the sidebar.
+
+<Note>
+  Manually set titles are preserved and won't be overwritten by auto-generation.
+</Note>
+
+## Runtime model switching
+
+Change the AI model mid-session with `/model` or `Ctrl+M`. Select from config models or type a custom `provider/model` string. The switch is saved with the session and restored on reload.
+
+## Editable messages
+
+Click any previous user message to edit it. The agent re-processes from that point; the original session history is preserved as a branch.
+
+## History search
+
+Press `Ctrl+R` to enter incremental history search. Start typing to filter previous inputs, then press `Enter` to select or `Escape` to cancel.
+
+## Tool permissions
+
+When an agent calls a tool, Docker Agent shows a confirmation dialog. You can:
+
+- **Approve once** — allow this specific call
+- **Always allow** — permanently approve this tool/command for the session
+- **Deny** — reject the tool call
+
+Pattern-based matching means "Always allow" approves only that exact pattern. Other commands from the same tool still require confirmation.
+
+<Tip>
+  Use `--yolo` or the `/yolo` command to auto-approve all tool calls. You can toggle this mid-session.
+</Tip>
+
+## Theming
+
+### Built-in themes
+
+`default`, `catppuccin-latte`, `catppuccin-mocha`, `dracula`, `gruvbox-dark`, `gruvbox-light`, `nord`, `one-dark`, `solarized-dark`, `tokyo-night`
+
+Switch themes interactively with `/theme`.
+
+### Custom themes
+
+Create theme files in `~/.cagent/themes/` as YAML. Theme files are **partial overrides** — omitted keys fall back to the built-in `default` theme.
+
+```yaml
+# ~/.cagent/themes/my-theme.yaml
+name: "My Custom Theme"
+
+colors:
+  background: "#1a1a2e"
+  background_alt: "#16213e"
+  text_bright: "#ffffff"
+  text_primary: "#e8e8e8"
+  text_secondary: "#b0b0b0"
+  text_muted: "#707070"
+  accent: "#4fc3f7"
+  brand: "#1d96f3"
+  success: "#4caf50"
+  error: "#f44336"
+  warning: "#ff9800"
+  info: "#00bcd4"
+
+# Optional: syntax highlighting
+chroma:
+  comment: "#6a9955"
+  keyword: "#569cd6"
+  literal_string: "#ce9178"
+
+# Optional: markdown rendering
+markdown:
+  heading: "#4fc3f7"
+  link: "#569cd6"
+  code: "#ce9178"
+```
+
+Apply a theme in your user config (`~/.config/cagent/config.yaml`):
+
+```yaml
+settings:
+  theme: my-theme
+```
+
+<Tip>
+  Custom themes hot-reload when you save the file — no restart needed.
+</Tip>
+
+<Warning>
+  User themes are layered on top of `default`, not on top of another built-in theme. To base your theme on `dracula`, copy its full YAML from the [built-in themes](https://github.com/docker/docker-agent/tree/main/pkg/tui/styles/themes) into `~/.cagent/themes/` and edit the copy.
+</Warning>

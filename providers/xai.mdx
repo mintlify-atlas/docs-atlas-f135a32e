@@ -1,0 +1,95 @@
+---
+title: "xAI (Grok)"
+description: "Use xAI's Grok models with docker-agent."
+---
+
+xAI provides the Grok family of models through an OpenAI-compatible API. docker-agent includes built-in support for xAI as an alias provider.
+
+## Setup
+
+1. Get an API key from [console.x.ai](https://console.x.ai/).
+2. Set the environment variable:
+
+```bash
+export XAI_API_KEY="your-api-key"
+```
+
+## Configuration
+
+<Tabs>
+  <Tab title="Inline">
+    ```yaml
+    agents:
+      root:
+        model: xai/grok-3
+        description: Assistant using Grok
+        instruction: You are a helpful assistant.
+    ```
+  </Tab>
+  <Tab title="Named model">
+    ```yaml
+    models:
+      grok:
+        provider: xai
+        model: grok-3
+        temperature: 0.7
+        max_tokens: 8192
+
+    agents:
+      root:
+        model: grok
+        description: Assistant using Grok
+        instruction: You are a helpful assistant.
+    ```
+  </Tab>
+</Tabs>
+
+## Available models
+
+| Model | Description | Context |
+| --- | --- | --- |
+| `grok-3` | Latest and most capable Grok model | 131K |
+| `grok-3-fast` | Faster variant with lower latency | 131K |
+| `grok-3-mini` | Compact model for simpler tasks | 131K |
+| `grok-3-mini-fast` | Fast variant of the mini model | 131K |
+| `grok-2` | Previous generation model | 128K |
+| `grok-vision` | Vision-capable model | 32K |
+
+For the latest model list, see the [xAI documentation](https://docs.x.ai/docs).
+
+## Thinking budget
+
+Grok models support thinking mode with effort level strings:
+
+```yaml
+models:
+  grok:
+    provider: xai
+    model: grok-3
+    thinking_budget: high  # minimal | low | medium | high | none
+```
+
+## How it works
+
+xAI is a built-in alias provider:
+
+- **API type:** `openai_chatcompletions`
+- **Base URL:** `https://api.x.ai/v1`
+- **Token variable:** `XAI_API_KEY`
+
+## Example: research assistant
+
+```yaml
+agents:
+  researcher:
+    model: xai/grok-3
+    description: Research assistant with real-time knowledge
+    instruction: |
+      You are a research assistant using Grok.
+      Provide well-researched, factual responses.
+      Cite sources when available.
+    toolsets:
+      - type: mcp
+        ref: docker:duckduckgo
+      - type: think
+```

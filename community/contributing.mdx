@@ -1,0 +1,137 @@
+---
+title: "Contributing"
+description: "docker-agent is open source. Here's how to set up your development environment and contribute."
+---
+
+docker-agent is developed in the open at [github.com/docker/docker-agent](https://github.com/docker/docker-agent). Contributions of all kinds are welcome — bug fixes, new features, documentation improvements, and test coverage.
+
+## Development setup
+
+### Prerequisites
+
+- [Go 1.26](https://go.dev/dl/) or higher
+- [Task 3.44](https://taskfile.dev/installation/) or higher
+- [golangci-lint](https://golangci-lint.run/docs/welcome/install/local/)
+- An API key for at least one AI provider
+
+<Note>
+  macOS and Linux are fully supported for development. On Windows, use `task build-local` to build via Docker instead of building natively.
+</Note>
+
+### Build from source
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/docker/docker-agent.git
+    cd docker-agent
+    ```
+  </Step>
+  <Step title="Build the binary">
+    ```bash
+    task build
+    # Output: ./bin/docker-agent
+    ```
+  </Step>
+  <Step title="Set your API keys">
+    ```bash
+    export OPENAI_API_KEY=your_key_here
+    export ANTHROPIC_API_KEY=your_key_here
+    ```
+  </Step>
+  <Step title="Run an example to verify the build">
+    ```bash
+    ./bin/docker-agent run examples/code.yaml
+    ```
+  </Step>
+</Steps>
+
+### Development commands
+
+| Command | Description |
+| --- | --- |
+| `task build` | Build the binary to `./bin/docker-agent` |
+| `task test` | Run all tests (clears API keys for determinism) |
+| `task lint` | Run golangci-lint |
+| `task format` | Format code |
+| `task dev` | Run lint, test, and build in sequence |
+| `task build-local` | Build for local platform via Docker |
+| `task cross` | Cross-platform builds (linux, darwin, windows — amd64 and arm64) |
+| `task build-image` | Build the Docker image |
+
+## Dogfooding
+
+docker-agent can help you work on docker-agent itself. The repository includes a specialized Go developer agent:
+
+```bash
+cd docker-agent
+docker agent run ./golang_developer.yaml
+```
+
+This agent understands the codebase and can answer questions, propose fixes, and implement features. It's especially useful for reviewing changes before submitting a PR.
+
+## Code style
+
+The project uses `golangci-lint` with a strict configuration. If `task lint` passes, your code meets the project's style requirements.
+
+Key conventions:
+
+- Wrap errors with context: `fmt.Errorf("context: %w", err)`
+- Pass `context.Context` as the first parameter in all functions that may block
+- Use `slog` for structured logging
+- Use the functional options pattern for constructors
+- In tests: use `t.Context()`, `t.TempDir()`, `t.Setenv()`, and `t.Parallel()`
+
+## Config schema
+
+Agent configs follow a strict versioned JSON schema (`agent-schema.json`). When adding new config fields:
+
+1. Add them only to `pkg/config/latest` — older version packages are frozen
+2. Update `agent-schema.json` accordingly
+3. Create an example YAML that demonstrates the new feature
+
+## Submitting a pull request
+
+<Steps>
+  <Step title="Fork and branch">
+    Fork the repository on GitHub and create a branch for your changes.
+  </Step>
+  <Step title="Write and test your changes">
+    Follow the code style guidelines above. Run `task lint` and `task test` before committing.
+  </Step>
+  <Step title="Sign your commits (DCO required)">
+    All contributions require a Developer Certificate of Origin sign-off:
+
+    ```bash
+    git commit -s -m "Your commit message"
+    ```
+  </Step>
+  <Step title="Open a pull request against main">
+    Use the included PR template. Describe what the change does and why, and link any relevant issues.
+  </Step>
+</Steps>
+
+<Tip>
+  Use the dogfooding agent (`docker agent run ./golang_developer.yaml`) to help write and review your changes before submitting.
+</Tip>
+
+## Opening issues
+
+File issues on the [GitHub issue tracker](https://github.com/docker/docker-agent/issues).
+
+- Use the included issue template
+- Search for existing issues before opening a new one
+- Issues are for bugs and feature requests only — not general support questions
+
+## Community
+
+Join the conversation on [Slack](https://dockercommunity.slack.com/archives/C09DASHHRU4) for questions and discussion.
+
+## Code of conduct
+
+- **Be courteous** — No abuse of any kind is tolerated.
+- **Encourage diversity** — Make everyone feel welcome regardless of background.
+- **Stay on topic** — Post in the right channel and keep discussions focused.
+- **Keep it legal** — Share only content you own.
+
+Governance for this repository is handled by Docker Inc.

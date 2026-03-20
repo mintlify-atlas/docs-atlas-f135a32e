@@ -1,0 +1,76 @@
+---
+title: "Telemetry"
+description: "docker-agent collects anonymous usage data to help improve the tool. Telemetry can be disabled at any time."
+---
+
+On first startup, docker-agent displays a notice about telemetry collection. All telemetry events are sent synchronously when recorded.
+
+## Disabling telemetry
+
+Set the `TELEMETRY_ENABLED` environment variable to `false`:
+
+```bash
+# For a single run
+TELEMETRY_ENABLED=false docker agent run agent.yaml
+
+# Permanently in your shell profile
+export TELEMETRY_ENABLED=false
+```
+
+<Note>
+  Telemetry is enabled by default. Set `TELEMETRY_ENABLED=false` to opt out.
+</Note>
+
+## What is collected
+
+| Event type | What it tracks |
+| --- | --- |
+| **Command** | CLI command name and success/failure status |
+| **Tool** | Agent tool calls with timing and error information |
+| **Token** | LLM token usage by model, session, and estimated cost |
+| **Session** | Session lifecycle — start, end, duration, and error counts |
+
+Specifically, the following data points are collected:
+
+- Command names and success/failure status
+- Agent names and model types
+- Tool names and whether calls succeed or fail
+- Token counts (input/output totals) and estimated costs
+- Session metadata (durations, error counts)
+
+## What is NOT collected
+
+docker-agent never collects:
+
+- User input or prompts
+- Agent responses or generated content
+- File contents
+- API keys or credentials
+- Any personally identifying information (PII)
+
+## Viewing telemetry events locally
+
+Use `--debug` to see telemetry events printed to the debug log without sending additional data anywhere:
+
+```bash
+docker agent run agent.yaml --debug
+```
+
+<Tip>
+  The debug log at `~/.cagent/cagent.debug.log` shows each telemetry call as it is made, which can help you verify what is being sent.
+</Tip>
+
+## For developers
+
+Telemetry is automatically wrapped around all CLI commands. To record additional events from application code, use the context-based API:
+
+```go
+// Recommended: context-based telemetry (clean and testable)
+if telemetryClient := telemetry.FromContext(ctx); telemetryClient != nil {
+    telemetryClient.RecordToolCall(ctx, "filesystem", "session-id", "agentName", time.Millisecond*500, nil)
+    telemetryClient.RecordTokenUsage(ctx, "gpt-4", 100, 50, 0.01)
+}
+
+// Direct calls are also available
+telemetry.TrackCommand("run", args)
+```

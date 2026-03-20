@@ -1,0 +1,82 @@
+---
+title: "MiniMax"
+description: "Use MiniMax AI models with docker-agent."
+---
+
+MiniMax provides AI models through an OpenAI-compatible API. docker-agent includes built-in support for MiniMax as an alias provider.
+
+## Setup
+
+1. Get an API key from [minimaxi.com](https://www.minimaxi.com/).
+2. Set the environment variable:
+
+```bash
+export MINIMAX_API_KEY="your-api-key"
+```
+
+## Configuration
+
+<Tabs>
+  <Tab title="Inline">
+    ```yaml
+    agents:
+      root:
+        model: minimax/MiniMax-M2.5
+        description: Assistant using MiniMax
+        instruction: You are a helpful assistant.
+    ```
+  </Tab>
+  <Tab title="Named model">
+    ```yaml
+    models:
+      minimax_model:
+        provider: minimax
+        model: MiniMax-M2.5
+        temperature: 0.7
+        max_tokens: 8192
+
+    agents:
+      root:
+        model: minimax_model
+        description: Assistant using MiniMax
+        instruction: You are a helpful assistant.
+    ```
+  </Tab>
+</Tabs>
+
+## Available models
+
+Check the [MiniMax documentation](https://www.minimaxi.com/document/introduction) for the current model catalog.
+
+| Model | Description |
+| --- | --- |
+| `MiniMax-M2.5` | Peak performance, 204K context |
+| `MiniMax-M2.5-highspeed` | Same capability as M2.5, ~100 tps |
+| `MiniMax-M2.1` | Multi-language programming capabilities |
+| `MiniMax-M2.1-highspeed` | Faster variant of M2.1, ~100 tps |
+| `MiniMax-M2` | Agentic capabilities, advanced reasoning |
+
+## How it works
+
+MiniMax is a built-in alias provider:
+
+- **API type:** `openai_chatcompletions`
+- **Base URL:** `https://api.minimax.io/v1`
+- **Token variable:** `MINIMAX_API_KEY`
+
+## Example: code assistant
+
+```yaml
+agents:
+  coder:
+    model: minimax/MiniMax-M2.5
+    description: Code assistant using MiniMax
+    instruction: |
+      You are an expert programmer using MiniMax M2.5.
+      Write clean, well-documented code.
+      Follow best practices for the language being used.
+    toolsets:
+      - type: filesystem
+      - type: shell
+      - type: think
+```

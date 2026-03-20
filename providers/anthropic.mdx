@@ -1,0 +1,85 @@
+---
+title: "Anthropic"
+description: "Use Claude Sonnet 4, Claude Sonnet 4.5, and other Anthropic models with docker-agent."
+---
+
+## Setup
+
+1. Get an API key from [console.anthropic.com](https://console.anthropic.com/).
+2. Set the environment variable:
+
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."
+```
+
+## Configuration
+
+<Tabs>
+  <Tab title="Inline">
+    ```yaml
+    agents:
+      root:
+        model: anthropic/claude-sonnet-4-0
+    ```
+  </Tab>
+  <Tab title="Named model">
+    ```yaml
+    models:
+      claude:
+        provider: anthropic
+        model: claude-sonnet-4-0
+        max_tokens: 64000
+
+    agents:
+      root:
+        model: claude
+    ```
+  </Tab>
+</Tabs>
+
+## Available models
+
+| Model | Best for |
+| --- | --- |
+| `claude-sonnet-4-5` | Most capable, extended thinking |
+| `claude-sonnet-4-0` | Strong coding, balanced performance |
+
+## Thinking budget
+
+Anthropic uses an integer token budget. The value must be between 1024 and 32768 and must be less than `max_tokens`. Defaults to 8192 with interleaved thinking enabled.
+
+```yaml
+models:
+  claude-deep:
+    provider: anthropic
+    model: claude-sonnet-4-5
+    max_tokens: 64000
+    thinking_budget: 16384  # must be < max_tokens
+```
+
+<Note>
+  Thinking budget values below 1024 or greater than or equal to `max_tokens` are ignored and a warning is logged.
+</Note>
+
+To disable thinking:
+
+```yaml
+models:
+  claude:
+    provider: anthropic
+    model: claude-sonnet-4-5
+    thinking_budget: 0
+```
+
+## Interleaved thinking
+
+Interleaved thinking allows the model to call tools during its reasoning process, enabling tighter integration between thinking and action. It is enabled by default.
+
+```yaml
+models:
+  claude:
+    provider: anthropic
+    model: claude-sonnet-4-5
+    provider_opts:
+      interleaved_thinking: false  # disable if needed
+```

@@ -1,0 +1,199 @@
+---
+title: "LSP"
+description: "Connect to Language Server Protocol servers for code intelligence."
+---
+
+The LSP tool connects your agent to any Language Server Protocol (LSP) server, providing comprehensive code intelligence: go-to-definition, find references, diagnostics, symbol search, renaming, formatting, and more.
+
+<Note>
+  The [Language Server Protocol](https://microsoft.github.io/language-server-protocol/) is a standard for editor-agnostic language features. Most programming languages have LSP servers available.
+</Note>
+
+## Available tools
+
+| Tool | Description | Read-only |
+| --- | --- | --- |
+| `lsp_workspace` | Get workspace info and available capabilities | Yes |
+| `lsp_hover` | Get type info and documentation for a symbol | Yes |
+| `lsp_definition` | Find where a symbol is defined | Yes |
+| `lsp_references` | Find all references to a symbol | Yes |
+| `lsp_document_symbols` | List all symbols in a file | Yes |
+| `lsp_workspace_symbols` | Search symbols across the workspace | Yes |
+| `lsp_diagnostics` | Get errors and warnings for a file | Yes |
+| `lsp_code_actions` | Get available quick fixes and refactorings | Yes |
+| `lsp_call_hierarchy` | Find incoming and outgoing calls | Yes |
+| `lsp_type_hierarchy` | Find supertypes and subtypes | Yes |
+| `lsp_implementations` | Find implementations of an interface | Yes |
+| `lsp_signature_help` | Get function signature at a call site | Yes |
+| `lsp_inlay_hints` | Get type annotations and parameter names | Yes |
+| `lsp_rename` | Rename a symbol across the workspace | No |
+| `lsp_format` | Format a file | No |
+
+## Configuration
+
+```yaml
+toolsets:
+  - type: lsp
+    command: gopls
+    file_types: [".go"]
+```
+
+### Options
+
+<ParamField path="command" type="string" required>
+  The LSP server executable. Must be available in `PATH` or installed via the `version` property.
+</ParamField>
+
+<ParamField path="args" type="array">
+  Command-line arguments passed to the LSP server process.
+</ParamField>
+
+<ParamField path="env" type="object">
+  Environment variables for the LSP server process.
+</ParamField>
+
+<ParamField path="file_types" type="array">
+  File extensions this LSP handles (e.g. `[".go", ".mod"]`). Used to route file requests to the correct server when multiple LSP servers are configured.
+</ParamField>
+
+<ParamField path="version" type="string">
+  Package reference for auto-installing the LSP server if it is not found in `PATH`. See [Auto-installing tools](/configuration/tools#auto-installing-tools).
+</ParamField>
+
+## Common LSP servers
+
+<CodeGroup>
+
+```yaml Go (gopls)
+toolsets:
+  - type: lsp
+    command: gopls
+    version: "golang/tools@v0.21.0"  # optional: auto-install
+    file_types: [".go"]
+```
+
+```yaml TypeScript / JavaScript
+toolsets:
+  - type: lsp
+    command: typescript-language-server
+    args: ["--stdio"]
+    file_types: [".ts", ".tsx", ".js", ".jsx"]
+```
+
+```yaml Python (pylsp)
+toolsets:
+  - type: lsp
+    command: pylsp
+    file_types: [".py"]
+```
+
+```yaml Rust (rust-analyzer)
+toolsets:
+  - type: lsp
+    command: rust-analyzer
+    file_types: [".rs"]
+```
+
+```yaml C / C++ (clangd)
+toolsets:
+  - type: lsp
+    command: clangd
+    file_types: [".c", ".cpp", ".h", ".hpp"]
+```
+
+</CodeGroup>
+
+## Multiple LSP servers
+
+Configure multiple LSP servers for polyglot codebases:
+
+```yaml agent.yaml
+agents:
+  polyglot:
+    model: anthropic/claude-sonnet-4-0
+    description: Full-stack developer
+    instruction: You are a full-stack developer.
+    toolsets:
+      - type: lsp
+        command: gopls
+        file_types: [".go"]
+      - type: lsp
+        command: typescript-language-server
+        args: ["--stdio"]
+        file_types: [".ts", ".tsx", ".js", ".jsx"]
+      - type: lsp
+        command: pylsp
+        file_types: [".py"]
+      - type: filesystem
+      - type: shell
+```
+
+## Example agent
+
+```yaml agent.yaml
+agents:
+  developer:
+    model: anthropic/claude-sonnet-4-0
+    description: Go developer with code intelligence
+    instruction: |
+      You are a software developer. Use LSP tools for navigation and
+      diagnostics. Always check lsp_diagnostics after editing code.
+    toolsets:
+      - type: lsp
+        command: gopls
+        file_types: [".go", ".mod"]
+      - type: filesystem
+      - type: shell
+```
+
+## Position format
+
+All LSP tools use **1-based** line and character positions:
+
+- Line 1 is the first line of the file.
+- Character 1 is the first character on the line.
+
+```json
+{
+  "file": "/path/to/file.go",
+  "line": 42,
+  "character": 15
+}
+```
+
+## Recommended workflow
+
+The LSP tool includes built-in instructions that guide the agent to:
+
+1. Start with `lsp_workspace` to discover available capabilities.
+2. Use `lsp_workspace_symbols` to find relevant code.
+3. Use `lsp_references` before modifying any symbol.
+4. Check `lsp_diagnostics` after every code change.
+5. Apply `lsp_format` after edits are complete.
+
+<Tip>
+  Always include the `filesystem` tool alongside LSP. The agent needs filesystem access to read and write files; LSP provides intelligence about the code structure.
+</Tip>
+
+## Auto-installation
+
+Docker Agent can automatically download and install LSP servers if they are not found in `PATH`. Set the `version` property to a package reference, or let Docker Agent auto-detect it from the command name.
+
+See [Auto-installing tools](/configuration/tools#auto-installing-tools) for details.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Filesystem" icon="folder" href="/tools/filesystem">
+    Read and write code files alongside LSP.
+  </Card>
+  <Card title="Shell" icon="terminal" href="/tools/shell">
+    Run build and test commands.
+  </Card>
+  <Card title="Tool configuration" icon="gear" href="/configuration/tools">
+    Auto-installing tools and full toolset options.
+  </Card>
+  <Card title="Think" icon="brain" href="/tools/think">
+    Plan refactors before executing them.
+  </Card>
+</CardGroup>

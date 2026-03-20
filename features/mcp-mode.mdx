@@ -1,0 +1,113 @@
+---
+title: "MCP Mode"
+description: "Expose Docker Agent agents as MCP tools for use in Claude Desktop, Claude Code, and other MCP-compatible applications."
+---
+
+The `docker agent serve mcp` command makes your agents available to any application that supports the [Model Context Protocol](https://modelcontextprotocol.io/). This lets you:
+
+- Use custom agents directly within **Claude Desktop** or **Claude Code**
+- Share specialized agents across different applications
+- Build reusable agent teams consumable from any MCP client
+- Integrate domain-specific agents into existing workflows
+
+## Usage
+
+```bash
+# Expose a local config via stdio (default)
+docker agent serve mcp ./agent.yaml
+
+# Expose from the agent catalog
+docker agent serve mcp agentcatalog/pirate
+
+# Set the working directory
+docker agent serve mcp ./agent.yaml --working-dir /path/to/project
+
+# Use streaming HTTP transport instead of stdio
+docker agent serve mcp ./agent.yaml --http --listen 127.0.0.1:9090
+```
+
+### Flags
+
+| Flag | Default | Description |
+| ---- | ------- | ----------- |
+| `-a, --agent <name>` | (all agents) | Name of the agent to expose |
+| `--http` | `false` | Use streaming HTTP transport instead of stdio |
+| `-l, --listen <addr>` | `127.0.0.1:8081` | Address to listen on (HTTP transport only) |
+| `--working-dir <path>` | (current dir) | Working directory for the session |
+
+## How it works
+
+By default, `serve mcp` uses **stdio transport**: the MCP client spawns the `docker agent serve mcp` process as a subprocess and communicates via stdin/stdout. This requires no network configuration.
+
+With `--http`, it starts a streaming HTTP server that MCP clients can connect to over the network.
+
+Each agent in your config file becomes a separate tool in the MCP client. For multi-agent configs, all agents are exposed.
+
+## Setting up Claude Desktop
+
+Add a server entry to your Claude Desktop MCP configuration file:
+
+- **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "myagent": {
+      "command": "/usr/local/bin/docker",
+      "args": [
+        "agent",
+        "serve",
+        "mcp",
+        "agentcatalog/coder",
+        "--working-dir",
+        "/home/user/projects"
+      ],
+      "env": {
+        "ANTHROPIC_API_KEY": "your_key_here",
+        "OPENAI_API_KEY": "your_key_here"
+      }
+    }
+  }
+}
+```
+
+Restart Claude Desktop after saving.
+
+## Setting up Claude Code
+
+```bash
+claude mcp add --transport stdio myagent \
+  --env OPENAI_API_KEY=$OPENAI_API_KEY \
+  --env ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY \
+  -- docker agent serve mcp agentcatalog/pirate --working-dir $(pwd)
+```
+
+## Multi-agent configs
+
+When you expose a multi-agent configuration, each agent becomes a separate tool:
+
+```yaml
+agents:
+  root:
+    model: anthropic/claude-sonnet-4-0
+    description: Main coordinator
+    sub_agents: [designer, engineer]
+  designer:
+    model: openai/gpt-4o-mini
+    description: UI/UX design specialist
+  engineer:
+    model: anthropic/claude-sonnet-4-0
+    description: Software engineer
+```
+
+All three agents (`root`, `designer`, `engineer`) appear as separate tools in the MCP client.
+
+## Troubleshooting
+
+| Problem | Solution |
+| ------- | -------- |
+| Agents not appearing | Verify the `docker` binary path and restart the MCP client |
+| Permission errors | Ensure the `docker` binary has execute permissions |
+| Missing API keys | Pass all required keys in the `env` section |
+| Working directory issues | Verify the `--working-dir` path exists |

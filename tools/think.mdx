@@ -1,0 +1,65 @@
+---
+title: "Think"
+description: "Step-by-step reasoning scratchpad for planning and decision-making."
+---
+
+The think tool is a reasoning scratchpad that lets agents think step-by-step before acting. The agent can write out its reasoning without producing visible output to the user — ideal for planning complex tasks, breaking down problems, and reasoning through multi-step solutions.
+
+This tool has no side effects and produces no output visible to the user. It only improves the quality of the agent's reasoning.
+
+## Configuration
+
+```yaml
+toolsets:
+  - type: think
+```
+
+The think tool has no configuration options.
+
+## Example agent
+
+```yaml agent.yaml
+agents:
+  root:
+    model: anthropic/claude-sonnet-4-0
+    description: Coding assistant
+    instruction: |
+      You are a coding assistant. Before making any changes,
+      use the think tool to plan your approach.
+    toolsets:
+      - type: think
+      - type: filesystem
+      - type: shell
+```
+
+<Tip>
+  Include the think tool in every agent. It adds minimal overhead while significantly improving the quality of reasoning on complex, multi-step tasks.
+</Tip>
+
+## When to use it
+
+The think tool is most valuable when the agent needs to:
+
+- **Plan** a multi-step task before executing it
+- **Reason** through competing options before choosing one
+- **Decompose** a complex problem into smaller steps
+- **Verify** its own reasoning before committing to an action
+
+It is especially effective when combined with tools that have side effects (like `shell` or `filesystem`), where planning ahead reduces the chance of mistakes.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Todo" icon="list-checks" href="/tools/todo">
+    Track task progress across multi-step work.
+  </Card>
+  <Card title="Background agents" icon="layers" href="/tools/background-agents">
+    Dispatch parallel work to sub-agents.
+  </Card>
+  <Card title="Shell" icon="terminal" href="/tools/shell">
+    Execute commands after planning.
+  </Card>
+  <Card title="Filesystem" icon="folder" href="/tools/filesystem">
+    Read and write files after planning.
+  </Card>
+</CardGroup>

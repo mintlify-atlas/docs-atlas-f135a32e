@@ -1,0 +1,93 @@
+---
+title: "A2A"
+description: "Connect to remote agents via the Agent-to-Agent protocol."
+---
+
+The A2A toolset connects your agent to a remote agent running as an A2A (Agent-to-Agent) server. The remote agent appears as a named tool that the local agent can call to delegate tasks.
+
+This is similar to the [handoff tool](/tools/handoff), but configured as a toolset rather than through the `handoffs` list.
+
+## Configuration
+
+```yaml
+toolsets:
+  - type: a2a
+    name: research_agent
+    url: "http://localhost:8080/a2a"
+```
+
+### Options
+
+<ParamField path="name" type="string" required>
+  Tool name for the remote agent. This is how the local agent refers to it in tool calls.
+</ParamField>
+
+<ParamField path="url" type="string" required>
+  The A2A server endpoint URL.
+</ParamField>
+
+## Example agent
+
+```yaml agent.yaml
+agents:
+  root:
+    model: openai/gpt-4o
+    description: Coordinator that delegates to a remote specialist
+    instruction: |
+      When the user asks research questions, delegate to the research_agent.
+      Synthesize its findings into a clear answer.
+    toolsets:
+      - type: a2a
+        name: research_agent
+        url: "http://research-service:8080/a2a"
+      - type: think
+```
+
+## Connecting to multiple remote agents
+
+You can add multiple A2A toolsets to connect to several remote agents:
+
+```yaml agent.yaml
+agents:
+  coordinator:
+    model: openai/gpt-4o
+    description: Coordinator with multiple remote specialists
+    instruction: Delegate tasks to the appropriate specialist.
+    toolsets:
+      - type: a2a
+        name: code_reviewer
+        url: "http://code-review-service/a2a"
+      - type: a2a
+        name: security_scanner
+        url: "http://security-service/a2a"
+      - type: think
+```
+
+<Note>
+  The remote agent must be running as an A2A server. See [A2A Protocol](/features/a2a) for how to start an agent as an A2A server using `docker agent serve a2a`.
+</Note>
+
+## A2A vs. handoff
+
+| | `a2a` toolset | `handoffs` list |
+| --- | --- | --- |
+| **Agent location** | Remote (separate process or machine) | Local (same config file) |
+| **Configuration** | `toolsets` entry | `handoffs` list on the agent |
+| **Control flow** | Returns result to caller | Transfers conversational ownership |
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Handoff" icon="arrow-right-from-bracket" href="/tools/handoff">
+    Transfer conversation control between local agents.
+  </Card>
+  <Card title="A2A protocol" icon="globe" href="/features/a2a">
+    Serve and consume A2A-compatible agents.
+  </Card>
+  <Card title="Transfer task" icon="arrow-right" href="/tools/transfer-task">
+    Delegate tasks to local sub-agents.
+  </Card>
+  <Card title="Multi-agent" icon="network" href="/concepts/multi-agent">
+    Multi-agent architecture patterns.
+  </Card>
+</CardGroup>

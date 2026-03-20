@@ -1,0 +1,97 @@
+---
+title: "ACP (Agent Client Protocol)"
+description: "Expose Docker Agent agents via the Agent Client Protocol for integration with ACP-compatible hosts like IDEs and developer tools."
+---
+
+The `docker agent serve acp` command starts an ACP server that communicates over **stdio** (standard input/output). Host applications — editors, IDEs, CLI tools — spawn the process as a subprocess and communicate using JSON-RPC messages.
+
+<Note>
+  **ACP vs A2A vs MCP**
+
+  - **ACP** connects an agent to a *host application* (IDE, editor) via stdio.
+  - **A2A** connects *agents to other agents* over HTTP.
+  - **MCP** exposes agents as *tools* for MCP clients.
+
+  Choose based on your integration target.
+</Note>
+
+## Usage
+
+```bash
+# Start ACP server on stdio
+docker agent serve acp ./agent.yaml
+
+# With a multi-agent team config
+docker agent serve acp ./team.yaml
+
+# From the agent catalog
+docker agent serve acp agentcatalog/pirate
+
+# With a custom session database
+docker agent serve acp ./agent.yaml --session-db ./my-sessions.db
+```
+
+### Flags
+
+| Flag | Default | Description |
+| ---- | ------- | ----------- |
+| `-s, --session-db <path>` | `~/.cagent/session.db` | Path to the SQLite session database |
+
+## How it works
+
+```
+Host application
+  └── spawns: docker agent serve acp agent.yaml
+        ├── stdin  ← JSON-RPC requests from host
+        └── stdout → JSON-RPC responses to host
+```
+
+<Steps>
+  <Step title="Host spawns the process">
+    The host application starts `docker agent serve acp agent.yaml` as a child process.
+  </Step>
+  <Step title="Communication over stdio">
+    The host sends JSON-RPC messages to stdin; Docker Agent reads them and processes them through the configured agent.
+  </Step>
+  <Step title="Streaming responses">
+    Agent responses, tool calls, and events stream back to the host over stdout.
+  </Step>
+  <Step title="Session persistence">
+    Sessions are stored in a SQLite database so they survive process restarts.
+  </Step>
+</Steps>
+
+## Features
+
+- **Stdio transport** — no network ports required; ideal for subprocess integration
+- **Session persistence** — SQLite-backed sessions survive process restarts
+- **Full agent support** — all Docker Agent features work: tools, multi-agent, model fallbacks
+- **Multi-agent configs** — team configurations with sub-agents work transparently
+
+## Integration example
+
+A host application communicates with Docker Agent via the ACP protocol:
+
+```javascript
+// Pseudocode for an IDE extension
+const child = spawn("docker", ["agent", "serve", "acp", "./agent.yaml"]);
+
+// Send a message to the agent
+child.stdin.write(
+  JSON.stringify({
+    jsonrpc: "2.0",
+    method: "agent/run",
+    params: { message: "Explain this code" },
+  }),
+);
+
+// Read responses
+child.stdout.on("data", (data) => {
+  const response = JSON.parse(data);
+  // Handle agent response, tool calls, etc.
+});
+```
+
+<Tip>
+  Use ACP when building IDE integrations or editor plugins that want to embed a Docker Agent agent as a subprocess. For HTTP-based integrations, use the [API Server](/features/api-server) instead.
+</Tip>

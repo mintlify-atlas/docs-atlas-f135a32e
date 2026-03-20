@@ -1,0 +1,265 @@
+---
+title: "Tools"
+description: "Tools give agents the ability to act in the world — read files, run commands, search the web, query databases, and more."
+---
+
+Tools extend an agent beyond conversation. When an agent needs to take an action — reading a file, running a shell command, or calling an API — it makes a tool call. Docker Agent executes the tool and returns the result, which the agent uses to continue its work.
+
+## How tool calls work
+
+<Steps>
+  <Step title="User sends a message">
+    The agent receives the user's request and reasons about what actions are needed.
+  </Step>
+  <Step title="Agent calls a tool">
+    The agent emits a structured tool call (e.g., `read_file(path="main.go")`).
+  </Step>
+  <Step title="Docker Agent executes the tool">
+    The runtime executes the tool and returns the result. By default, tools with side effects (writes, shell commands) require user confirmation first.
+  </Step>
+  <Step title="Agent continues">
+    The agent incorporates the result and decides whether to call more tools or respond to the user.
+  </Step>
+</Steps>
+
+<Tip>
+  Use `--yolo` to auto-approve all tool calls without prompts — useful for scripting and automated workflows:
+
+  ```bash
+  docker agent run agent.yaml --yolo
+  ```
+</Tip>
+
+## Toolsets
+
+Tools are grouped into **toolsets** — an array of tool configurations on each agent. Each toolset has a `type` that determines which tools are loaded:
+
+```yaml agent.yaml
+agents:
+  root:
+    model: anthropic/claude-sonnet-4-0
+    instruction: You are a coding assistant.
+    toolsets:
+      - type: filesystem
+      - type: shell
+      - type: think
+      - type: mcp
+        ref: docker:duckduckgo
+```
+
+### Toolset fields
+
+<ParamField path="type" type="string" required>
+  The toolset type. Determines which tools are loaded. See [built-in toolsets](#built-in-toolsets) and [MCP toolsets](#mcp-toolsets).
+</ParamField>
+
+<ParamField path="instruction" type="string">
+  Extra guidance added to the agent's context about how and when to use tools in this toolset.
+</ParamField>
+
+<ParamField path="tools" type="string[]">
+  Restrict which individual tools within this toolset are available to the agent.
+</ParamField>
+
+<ParamField path="model" type="string">
+  Override the model used for the turn that processes tool results from this toolset. Useful for per-toolset model routing.
+</ParamField>
+
+## Built-in toolsets
+
+Docker Agent ships with built-in toolsets that require no external dependencies:
+
+| Toolset type | Description |
+| --- | --- |
+| `filesystem` | Read, write, list, search, and navigate files and directories |
+| `shell` | Execute shell commands in the user's environment |
+| `think` | Step-by-step reasoning scratchpad for planning and decision-making |
+| `todo` | Task list management for complex multi-step workflows |
+| `memory` | Persistent key-value storage backed by SQLite |
+| `fetch` | Make HTTP requests to external APIs and web services |
+| `script` | Define custom shell scripts as named tools |
+| `lsp` | Connect to Language Server Protocol servers for code intelligence |
+| `api` | Create custom tools that call HTTP APIs without writing code |
+| `user_prompt` | Ask users questions and collect interactive input |
+| `transfer_task` | Delegate tasks to sub-agents (auto-enabled with `sub_agents`) |
+| `background_agents` | Dispatch work to sub-agents concurrently |
+| `handoff` | Delegate tasks to remote agents via A2A |
+| `a2a` | Connect to remote agents via the Agent-to-Agent protocol |
+
+See the [Built-in Tools](/tools/filesystem) section for full configuration reference for each type.
+
+### Toolset-specific options
+
+Some toolsets accept additional configuration fields:
+
+<Tabs>
+  <Tab title="memory">
+    ```yaml
+    toolsets:
+      - type: memory
+        path: ./agent-memory.db  # path to the SQLite database file
+    ```
+  </Tab>
+  <Tab title="todo">
+    ```yaml
+    toolsets:
+      - type: todo
+        shared: true  # all agents in the team share the same todo list
+    ```
+  </Tab>
+  <Tab title="fetch">
+    ```yaml
+    toolsets:
+      - type: fetch
+        timeout: 30  # request timeout in seconds
+    ```
+  </Tab>
+  <Tab title="filesystem">
+    ```yaml
+    toolsets:
+      - type: filesystem
+        post_edit:
+          - path: "**/*.go"
+            cmd: "gofmt -w"
+    ```
+  </Tab>
+  <Tab title="script">
+    ```yaml
+    toolsets:
+      - type: script
+        shell:
+          run_tests:
+            cmd: "go test ./..."
+            description: "Run the full test suite"
+          lint:
+            cmd: "golangci-lint run"
+            description: "Run the linter"
+    ```
+  </Tab>
+</Tabs>
+
+## MCP toolsets
+
+Docker Agent supports the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) for connecting external tool servers. There are three ways to connect an MCP server:
+
+<Tabs>
+  <Tab title="Docker MCP (recommended)">
+    Run MCP servers in Docker containers via the MCP Gateway. Browse the [Docker MCP Catalog](https://hub.docker.com/search?q=&type=mcp).
+
+    ```yaml
+    toolsets:
+      - type: mcp
+        ref: docker:duckduckgo   # runs duckduckgo MCP server in a container
+    ```
+
+    This is the recommended approach — servers run isolated in containers and require no local installation.
+  </Tab>
+  <Tab title="Local (stdio)">
+    Run an MCP server as a local process communicating over stdin/stdout:
+
+    ```yaml
+    toolsets:
+      - type: mcp
+        command: npx
+        args:
+          - -y
+          - "@modelcontextprotocol/server-filesystem"
+          - /tmp
+        env:
+          NODE_ENV: production
+    ```
+  </Tab>
+  <Tab title="Remote (SSE / HTTP)">
+    Connect to an MCP server running on a network:
+
+    ```yaml
+    toolsets:
+      - type: mcp
+        remote:
+          url: https://mcp.example.com/sse
+          transport_type: sse
+          headers:
+            Authorization: "Bearer ${env.MCP_TOKEN}"
+    ```
+  </Tab>
+</Tabs>
+
+### Reusable MCP definitions
+
+Define MCP servers once in the top-level `mcps` section and reference them from multiple agents:
+
+```yaml agent.yaml
+mcps:
+  search:
+    ref: docker:duckduckgo
+  github:
+    command: npx
+    args: ["-y", "@modelcontextprotocol/server-github"]
+    env:
+      GITHUB_PERSONAL_ACCESS_TOKEN: "${env.GITHUB_TOKEN}"
+
+agents:
+  researcher:
+    toolsets:
+      - type: mcp
+        ref: search
+      - type: mcp
+        ref: github
+```
+
+## Toolset instructions
+
+Use the `instruction` field to give the agent extra guidance about a specific toolset:
+
+```yaml agent.yaml
+agents:
+  root:
+    toolsets:
+      - type: filesystem
+        instruction: |
+          Only read files in the current working directory.
+          Never modify files outside the project root.
+      - type: shell
+        instruction: |
+          Prefer read-only commands when possible.
+          Always confirm with the user before deleting anything.
+```
+
+## Permissions
+
+Control which tools are auto-approved, always require confirmation, or are blocked entirely:
+
+```yaml agent.yaml
+permissions:
+  allow:
+    - read_file        # always auto-approve file reads
+    - list_directory
+  ask:
+    - write_file       # always ask even if --yolo is set
+  deny:
+    - shell            # block all shell execution
+    - mcp:github:*     # block all GitHub MCP tools
+```
+
+The evaluation order is: `deny` first, then `allow`, then `ask`, then the default behavior (read-only tools auto-approved, others ask). Patterns support glob-style matching.
+
+<Note>
+  See [Permissions](/configuration/permissions) for the full configuration reference.
+</Note>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Built-in tools reference" icon="hammer" href="/tools/filesystem">
+    Full reference for every built-in toolset.
+  </Card>
+  <Card title="Tool configuration" icon="gear" href="/configuration/tools">
+    All toolset configuration options.
+  </Card>
+  <Card title="Permissions" icon="shield" href="/configuration/permissions">
+    Control tool approval behavior.
+  </Card>
+  <Card title="RAG" icon="database" href="/features/rag">
+    Add document retrieval to your agents.
+  </Card>
+</CardGroup>

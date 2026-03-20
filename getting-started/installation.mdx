@@ -1,0 +1,193 @@
+---
+title: "Installation"
+description: "Get docker-agent running on your system in minutes."
+---
+
+## Prerequisites
+
+- An API key for at least one AI provider (OpenAI, Anthropic, Google, etc.)
+- **Optional:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) — for Docker MCP tools and Docker Model Runner
+
+## Install docker-agent
+
+<Tabs>
+  <Tab title="Docker Desktop">
+    Starting with **Docker Desktop 4.63+**, docker-agent is pre-installed. No separate installation needed.
+
+    Open a terminal and verify:
+
+    ```bash
+    docker agent version
+    ```
+
+    <Tip>
+      Docker Desktop bundles docker-agent and keeps it up to date automatically. This is the easiest way to get started, especially if you want to use Docker MCP tools or Docker Model Runner for local models.
+    </Tip>
+  </Tab>
+
+  <Tab title="Homebrew">
+    <Steps>
+      <Step title="Install with Homebrew">
+        ```bash
+        brew install docker-agent
+        ```
+      </Step>
+
+      <Step title="Verify the installation">
+        ```bash
+        docker-agent version
+        ```
+      </Step>
+
+      <Step title="(Optional) Install as a Docker CLI plugin">
+        Symlink the binary into the Docker CLI plugins directory to use `docker agent` instead of `docker-agent`:
+
+        ```bash
+        mkdir -p ~/.docker/cli-plugins
+        ln -sf "$(which docker-agent)" ~/.docker/cli-plugins/docker-agent
+        docker agent version
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="Binary release">
+    Download a prebuilt binary from [GitHub Releases](https://github.com/docker/docker-agent/releases) for your platform.
+
+    <Tabs>
+      <Tab title="macOS / Linux">
+        <Steps>
+          <Step title="Download the binary">
+            ```bash
+            OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+            ARCH=$(uname -m); case "$ARCH" in x86_64) ARCH=amd64;; aarch64) ARCH=arm64;; esac
+            curl -L "https://github.com/docker/docker-agent/releases/latest/download/docker-agent-${OS}-${ARCH}" -o docker-agent
+            chmod +x docker-agent
+            ```
+          </Step>
+
+          <Step title="Move to your PATH or Docker CLI plugins">
+            To use as a standalone command:
+
+            ```bash
+            sudo mv docker-agent /usr/local/bin/
+            docker-agent version
+            ```
+
+            Or to use as a Docker CLI plugin (`docker agent`):
+
+            ```bash
+            mkdir -p ~/.docker/cli-plugins
+            mv docker-agent ~/.docker/cli-plugins/docker-agent
+            docker agent version
+            ```
+          </Step>
+        </Steps>
+      </Tab>
+
+      <Tab title="Windows">
+        <Steps>
+          <Step title="Download the binary">
+            Download `docker-agent-windows-amd64.exe` from the [GitHub Releases page](https://github.com/docker/docker-agent/releases) and rename it to `docker-agent.exe`.
+          </Step>
+
+          <Step title="Add to PATH or Docker CLI plugins">
+            To use as a standalone command, move `docker-agent.exe` to a directory in your `PATH`.
+
+            To use as a Docker CLI plugin (`docker agent`), move it to `%USERPROFILE%\.docker\cli-plugins\`:
+
+            ```powershell
+            mkdir -Force "$env:USERPROFILE\.docker\cli-plugins"
+            Move-Item docker-agent.exe "$env:USERPROFILE\.docker\cli-plugins\docker-agent.exe"
+            docker agent version
+            ```
+          </Step>
+        </Steps>
+      </Tab>
+    </Tabs>
+  </Tab>
+
+  <Tab title="Build from source">
+    Build from source to get the latest features or to contribute.
+
+    **Prerequisites:**
+    - [Go 1.26](https://go.dev/dl/) or higher
+    - [Task 3.44](https://taskfile.dev/installation/) or higher
+    - [golangci-lint](https://golangci-lint.run/docs/welcome/install/local/) (for linting)
+
+    <Steps>
+      <Step title="Clone the repository">
+        ```bash
+        git clone https://github.com/docker/docker-agent.git
+        cd docker-agent
+        ```
+      </Step>
+
+      <Step title="Build the binary">
+        <Tabs>
+          <Tab title="macOS / Linux">
+            ```bash
+            task build
+            ```
+          </Tab>
+          <Tab title="Windows">
+            ```bash
+            task build-local
+            ```
+
+            <Note>
+              On Windows, `task build-local` builds the binary inside a Docker container using Docker Buildx, which avoids issues with Windows-specific toolchain setup and CGo cross-compilation. The output goes to the `./dist` directory.
+            </Note>
+          </Tab>
+        </Tabs>
+      </Step>
+
+      <Step title="Run the binary">
+        ```bash
+        ./bin/docker-agent --help
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## Set up API keys
+
+docker-agent needs at least one API key for the AI provider you want to use. Set it as an environment variable before running any agents.
+
+```bash
+export OPENAI_API_KEY="sk-..."        # OpenAI
+export ANTHROPIC_API_KEY="sk-ant-..." # Anthropic
+export GOOGLE_API_KEY="AI..."         # Google Gemini
+export MISTRAL_API_KEY="..."          # Mistral
+```
+
+<Note>
+  You only need the key for the provider configured in your agent YAML. If you use [Docker Model Runner](/providers/dmr) for local models, no API key is required.
+</Note>
+
+To persist your API key across sessions, add the `export` line to your shell profile (`~/.bashrc`, `~/.zshrc`, or equivalent).
+
+## Verify the installation
+
+```bash
+# Check the installed version
+docker agent version
+
+# Run the default built-in agent
+docker agent run
+
+# Try a pre-built agent from the catalog
+docker agent run agentcatalog/pirate
+```
+
+## What's next
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/getting-started/quickstart">
+    Create and run your first agent in under 5 minutes.
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="/community/troubleshooting">
+    Debug mode, common issues, and solutions.
+  </Card>
+</CardGroup>

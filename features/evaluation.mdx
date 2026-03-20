@@ -1,0 +1,202 @@
+---
+title: "Evaluation"
+description: "Test agent behavior systematically with Docker Agent's built-in evaluation framework."
+---
+
+The `docker agent eval` command runs your agent against a set of saved sessions and scores the results. Use it to catch regressions, validate behavior, and measure agent quality.
+
+## Running evaluations
+
+```bash
+# Run all evals in ./evals/ against agent.yaml
+docker agent eval agent.yaml
+
+# Specify a custom eval directory
+docker agent eval agent.yaml ./my-evals
+
+# Run with more concurrency
+docker agent eval agent.yaml -c 8
+
+# Only run evals matching a pattern
+docker agent eval agent.yaml --only "auth"
+
+# Keep containers for debugging
+docker agent eval agent.yaml --keep-containers
+```
+
+### Flags
+
+| Flag | Default | Description |
+| ---- | ------- | ----------- |
+| `-c, --concurrency <n>` | Number of CPUs | Number of concurrent evaluation runs |
+| `--judge-model <ref>` | `anthropic/claude-opus-4-5-20251101` | Model used for relevance checking |
+| `--output <dir>` | `<eval-dir>/results` | Directory for results and logs |
+| `--only <pattern>` | (all) | Only run evals whose filenames match this pattern (repeatable) |
+| `--base-image <image>` | (built-in) | Custom base Docker image for running evaluations |
+| `--keep-containers` | `false` | Keep containers after evaluation (skip `--rm`) |
+| `-e, --env <KEY[=VALUE]>` | — | Environment variables to pass to containers (repeatable) |
+
+## How evaluations work
+
+Each evaluation is a JSON file containing a **recorded session** — the conversation history from a previous run including user messages, tool calls, and the agent's response.
+
+When you run `docker agent eval`, Docker Agent:
+
+<Steps>
+  <Step title="Loads eval files">
+    Reads all `.json` files from the eval directory (or matches `--only` patterns).
+  </Step>
+  <Step title="Builds a Docker image">
+    Builds a Docker image containing the agent binary. Custom images can be specified with `--base-image` or per-eval with the `image` field.
+  </Step>
+  <Step title="Runs the agent in a container">
+    Executes the agent in an isolated Docker container with the user messages from the eval, using `--exec --yolo --json` mode.
+  </Step>
+  <Step title="Scores the results">
+    Compares the new response against the recorded session using tool trajectory scoring, response size, and LLM-as-a-judge relevance checks.
+  </Step>
+  <Step title="Saves results">
+    Writes results to the output directory: a log file, a SQLite session database, and a JSON summary.
+  </Step>
+</Steps>
+
+## Eval file format
+
+Eval files are session JSON files — the same format produced by `/eval` in the TUI or exported from the API. The simplest way to create one is to record a session in the TUI and use `/eval` to export it.
+
+A session file contains the conversation history. Optionally, add an `evals` block to specify scoring criteria:
+
+```json
+{
+  "id": "41b179a2-ed19-4ae2-a45d-95775aaa90f7",
+  "title": "Count files in local folder",
+  "messages": [
+    {
+      "message": {
+        "agentFilename": "./agent.yaml",
+        "message": {
+          "role": "user",
+          "content": "How many files in the local folder?"
+        }
+      }
+    },
+    {
+      "message": {
+        "agentName": "root",
+        "message": {
+          "role": "assistant",
+          "content": "",
+          "tool_calls": [{
+            "function": { "name": "list_directory", "arguments": "{\"path\":\"./ \"}" }
+          }]
+        }
+      }
+    }
+  ],
+  "evals": {
+    "relevance": [
+      "The response gives a specific number of files",
+      "The response lists the file names"
+    ],
+    "size": "S"
+  }
+}
+```
+
+## Scoring criteria
+
+The `evals` block in a session file supports these fields:
+
+| Field | Type | Description |
+| ----- | ---- | ----------- |
+| `relevance` | `[]string` | Statements that should be true about the response. Evaluated by the judge model. |
+| `size` | `string` | Expected response size: `S`, `M`, `L`, or `XL`. |
+| `working_dir` | `string` | Subdirectory under `evals/working_dirs/` to use as the working directory. |
+| `setup` | `string` | Shell script to run in the container before the agent runs. |
+| `image` | `string` | Custom Docker image for this eval (overrides `--base-image`). |
+
+### Tool trajectory scoring
+
+If the recorded session contains tool calls, the eval framework extracts the expected tool call sequence and computes an F1 score against what the agent actually called. A score of `1.0` means the agent used the same tools in the same order.
+
+### Relevance scoring
+
+For each string in `relevance`, the judge model evaluates whether the agent's response satisfies that criterion. Results are reported as `N/M` (e.g., `2/3` means 2 out of 3 criteria passed).
+
+### Response size
+
+Expected size categories:
+
+| Size | Description |
+| ---- | ----------- |
+| `S` | Short (a few sentences) |
+| `M` | Medium (a paragraph or two) |
+| `L` | Long (several paragraphs) |
+| `XL` | Very long (extensive output) |
+
+## Setting up evaluations
+
+<Steps>
+  <Step title="Create an agent config">
+    Write a standard agent YAML file:
+
+    ```yaml
+    # agent.yaml
+    agents:
+      root:
+        model: openai/gpt-4o
+        instruction: You know how to read and list files.
+        toolsets:
+          - type: filesystem
+    ```
+  </Step>
+  <Step title="Create an evals directory">
+    ```bash
+    mkdir evals
+    ```
+  </Step>
+  <Step title="Record a session">
+    Run the agent, perform a task, then use `/eval` in the TUI to export the session. Save the JSON file to the `evals/` directory.
+
+    Or use `docker agent run --exec --json` to capture output and save it as a session file.
+  </Step>
+  <Step title="Add scoring criteria (optional)">
+    Edit the session JSON to add an `evals` block with `relevance` criteria and/or expected `size`.
+  </Step>
+  <Step title="Run the evaluation">
+    ```bash
+    docker agent eval agent.yaml ./evals
+    ```
+  </Step>
+</Steps>
+
+## Example output
+
+```
+Evaluation run: golden-wolf-42
+Loading evaluation sessions...
+Running 2 evaluations with concurrency 8
+
+  ✓ Count files in local folder  (tool calls: 1.0, relevance: 2/2)
+  ✓ Check README.md content      (tool calls: 1.0, relevance: 1/1)
+
+Total: 2/2 passed  Cost: $0.005  Duration: 4.2s
+
+Sessions DB: ./evals/results/golden-wolf-42.db
+Sessions JSON: ./evals/results/golden-wolf-42.json
+Log: ./evals/results/golden-wolf-42.log
+```
+
+## Output files
+
+Results are saved to the output directory (default: `<eval-dir>/results`):
+
+| File | Description |
+| ---- | ----------- |
+| `<run-name>.log` | Full debug log for the evaluation run |
+| `<run-name>.db` | SQLite database with full session data |
+| `<run-name>.json` | JSON summary of all results |
+
+<Tip>
+  Use `--keep-containers` when a test fails unexpectedly. The container stays running so you can inspect files, environment variables, and logs inside.
+</Tip>

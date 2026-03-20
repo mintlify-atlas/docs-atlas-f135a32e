@@ -1,0 +1,86 @@
+---
+title: "Transfer task"
+description: "Delegate a task to a sub-agent and receive the result."
+---
+
+The `transfer_task` tool allows an orchestrator agent to delegate a task to a specialized sub-agent and receive the result back. This is the primary mechanism for synchronous multi-agent orchestration.
+
+You do not need to add it manually as a toolset — `transfer_task` is automatically available on any agent that has a `sub_agents` list configured.
+
+## Configuration
+
+Configure `sub_agents` on the orchestrator agent. The `transfer_task` tool is added automatically:
+
+```yaml
+agents:
+  coordinator:
+    model: openai/gpt-4o
+    description: Coordinates work across specialists
+    instruction: Analyze requests and delegate to the right specialist.
+    sub_agents: [developer, researcher]
+
+  developer:
+    model: anthropic/claude-sonnet-4-0
+    description: Expert software developer
+    instruction: Write clean, production-ready code.
+    toolsets:
+      - type: filesystem
+      - type: shell
+
+  researcher:
+    model: openai/gpt-4o
+    description: Web researcher
+    instruction: Search for information online.
+    toolsets:
+      - type: mcp
+        ref: docker:duckduckgo
+```
+
+The `coordinator` agent automatically gets a `transfer_task` tool that can delegate to `developer` or `researcher` by name.
+
+## How it works
+
+<Steps>
+  <Step title="Orchestrator calls transfer_task">
+    The orchestrator agent calls `transfer_task` with the sub-agent name and a task description.
+  </Step>
+  <Step title="Sub-agent executes the task">
+    The sub-agent runs with its own tools and instructions to complete the task.
+  </Step>
+  <Step title="Result returned to orchestrator">
+    The sub-agent's final response is returned to the orchestrator as the tool result.
+  </Step>
+  <Step title="Orchestrator continues">
+    The orchestrator uses the result to decide the next step.
+  </Step>
+</Steps>
+
+## Transfer task vs. background agents vs. handoff
+
+| | `transfer_task` | `background_agents` | `handoff` |
+| --- | --- | --- | --- |
+| **Execution** | Sequential — waits for result | Parallel — returns task ID immediately | Transfers ownership — calling agent exits |
+| **Returns** | Sub-agent's result | Task ID for later polling | Nothing — sub-agent takes over |
+| **Best for** | Delegating to one specialist | Fan-out parallel work | Routing and pipeline workflows |
+| **Setup** | `sub_agents` list | `sub_agents` list | `handoffs` list |
+
+<Tip>
+  For parallel task delegation to multiple sub-agents, see [Background Agents](/tools/background-agents). For routing the conversation to a different agent without returning, see [Handoff](/tools/handoff).
+</Tip>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Background agents" icon="layers" href="/tools/background-agents">
+    Dispatch work to multiple sub-agents in parallel.
+  </Card>
+  <Card title="Handoff" icon="arrow-right-from-bracket" href="/tools/handoff">
+    Transfer conversational control to another agent.
+  </Card>
+  <Card title="Multi-agent" icon="network" href="/concepts/multi-agent">
+    Multi-agent architecture patterns.
+  </Card>
+  <Card title="Todo" icon="list-checks" href="/tools/todo">
+    Track tasks across a multi-agent workflow.
+  </Card>
+</CardGroup>

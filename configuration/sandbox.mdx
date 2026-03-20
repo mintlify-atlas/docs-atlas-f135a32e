@@ -1,0 +1,89 @@
+---
+title: "Sandbox mode"
+description: "Run agents in an isolated Docker container for enhanced security."
+---
+
+Sandbox mode runs the entire agent inside a Docker container instead of directly on the host system. All tool operations — shell commands, file reads and writes, network access — happen inside the container, limiting the potential impact of unintended or malicious actions.
+
+<Info>
+  Sandbox mode requires Docker to be installed and running on the host system.
+</Info>
+
+## Enabling sandbox mode
+
+Pass the `--sandbox` flag when running an agent:
+
+```bash
+docker agent run --sandbox agent.yaml
+```
+
+<Steps>
+  <Step title="Write your agent config">
+    A normal agent config. No special configuration is needed to support sandboxing:
+
+    ```yaml agent.yaml
+    agents:
+      root:
+        model: openai/gpt-4o
+        description: Agent with sandboxed shell access
+        instruction: You are a helpful assistant with access to a sandboxed shell environment.
+        toolsets:
+          - type: shell
+          - type: filesystem
+    ```
+  </Step>
+  <Step title="Run with --sandbox">
+    Pass the flag at runtime:
+
+    ```bash
+    docker agent run --sandbox agent.yaml
+    ```
+  </Step>
+</Steps>
+
+## How it works
+
+<Steps>
+  <Step title="Container launch">
+    docker-agent starts a Docker container when the session begins.
+  </Step>
+  <Step title="Workspace mount">
+    The current working directory is mounted into the container, giving the agent access to your project files.
+  </Step>
+  <Step title="Isolated execution">
+    All tool operations (shell commands, file edits, network requests) execute inside the container, not on the host.
+  </Step>
+  <Step title="Automatic cleanup">
+    When the session ends, the container is automatically stopped and removed.
+  </Step>
+</Steps>
+
+## Shebang shorthand
+
+Add a shebang line to your config file to make it directly executable with sandbox mode:
+
+```yaml sandbox_agent.yaml
+#!/usr/bin/env docker agent run --sandbox
+
+agents:
+  root:
+    model: openai/gpt-4o
+    description: Agent running in a sandboxed environment
+    instruction: You are a helpful assistant with access to a sandboxed shell environment.
+    toolsets:
+      - type: shell
+```
+
+Then run it directly:
+
+```bash
+chmod +x sandbox_agent.yaml
+./sandbox_agent.yaml
+```
+
+<Warning>
+  **Limitations:**
+
+  - The container starts fresh each session — there is no persistence between sessions
+  - Any files created inside the container (outside the mounted workspace) are lost when the session ends
+</Warning>

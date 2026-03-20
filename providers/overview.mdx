@@ -1,0 +1,152 @@
+---
+title: "Model providers"
+description: "docker-agent supports multiple AI model providers. Choose the right one for your use case, or use multiple providers in the same configuration."
+---
+
+Select a provider, set an API key (if required), and reference models with `provider/model-name` syntax. You can mix providers across agents in a single config.
+
+## How model references work
+
+Models are identified using a `provider/model-name` format. You can use this inline on an agent or define a named model in the `models` section for reuse and parameter control.
+
+<Tabs>
+  <Tab title="Inline reference">
+    ```yaml
+    agents:
+      root:
+        model: openai/gpt-4o
+    ```
+  </Tab>
+  <Tab title="Named model">
+    ```yaml
+    models:
+      claude:
+        provider: anthropic
+        model: claude-sonnet-4-0
+        max_tokens: 64000
+
+    agents:
+      root:
+        model: claude
+    ```
+  </Tab>
+</Tabs>
+
+See [Model configuration](/configuration/models) for the full schema.
+
+## Supported providers
+
+<CardGroup cols={2}>
+  <Card title="OpenAI" icon="circle" href="/providers/openai">
+    GPT-4o, GPT-5, GPT-5-mini. The most widely used AI models.
+  </Card>
+  <Card title="Anthropic" icon="circle" href="/providers/anthropic">
+    Claude Sonnet 4, Claude Sonnet 4.5. Excellent for coding and analysis.
+  </Card>
+  <Card title="Google Gemini" icon="circle" href="/providers/google">
+    Gemini 2.5 Flash, Gemini 3 Pro. Fast and cost-effective.
+  </Card>
+  <Card title="AWS Bedrock" icon="circle" href="/providers/bedrock">
+    Access Claude, Nova, Llama, and more through AWS infrastructure.
+  </Card>
+  <Card title="Docker Model Runner" icon="circle" href="/providers/dmr">
+    Run models locally with Docker. No API keys, no costs.
+  </Card>
+  <Card title="Custom providers" icon="circle" href="/providers/custom">
+    Connect to any OpenAI-compatible API endpoint.
+  </Card>
+</CardGroup>
+
+## Quick comparison
+
+| Provider | Key | Auth env var | Example model reference | Local? |
+| --- | --- | --- | --- | --- |
+| OpenAI | `openai` | `OPENAI_API_KEY` | `openai/gpt-4o` | No |
+| Anthropic | `anthropic` | `ANTHROPIC_API_KEY` | `anthropic/claude-sonnet-4-0` | No |
+| Google Gemini | `google` | `GOOGLE_API_KEY` | `google/gemini-2.5-flash` | No |
+| AWS Bedrock | `amazon-bedrock` | AWS credentials | `amazon-bedrock/...` | No |
+| Docker Model Runner | `dmr` | None | `dmr/ai/qwen3` | Yes |
+| Mistral | `mistral` | `MISTRAL_API_KEY` | `mistral/mistral-large-latest` | No |
+| xAI (Grok) | `xai` | `XAI_API_KEY` | `xai/grok-3` | No |
+| Nebius | `nebius` | `NEBIUS_API_KEY` | `nebius/deepseek-ai/DeepSeek-V3` | No |
+| MiniMax | `minimax` | `MINIMAX_API_KEY` | `minimax/MiniMax-M2.5` | No |
+| Ollama | `ollama` | None | `ollama/llama3.2` | Yes |
+| Custom | user-defined | user-defined | `my_provider/model` | Either |
+
+## Custom provider configuration
+
+Use the `providers` section to define a reusable provider with a custom `base_url`, `token_key`, and `api_type`. This is useful for self-hosted models, API proxies, and any OpenAI-compatible endpoint.
+
+```yaml
+providers:
+  my_gateway:
+    api_type: openai_chatcompletions  # openai_chatcompletions | openai_responses
+    base_url: https://api.example.com/v1
+    token_key: MY_API_KEY             # name of the env var holding the token
+
+models:
+  my_model:
+    provider: my_gateway
+    model: gpt-4o
+    max_tokens: 32768
+
+agents:
+  root:
+    model: my_model
+```
+
+Once defined, you can also use shorthand `provider/model` syntax:
+
+```yaml
+agents:
+  root:
+    model: my_gateway/gpt-4o-mini
+```
+
+See [Custom providers](/providers/custom) for full details.
+
+## Using multiple providers
+
+Different agents in the same configuration can use different providers. This lets you assign expensive models to complex tasks and cheaper or local models to routine work.
+
+```yaml
+models:
+  claude:
+    provider: anthropic
+    model: claude-sonnet-4-0
+    max_tokens: 64000
+  gpt:
+    provider: openai
+    model: gpt-4o
+  local:
+    provider: dmr
+    model: ai/qwen3
+
+agents:
+  root:
+    model: claude       # coordinator uses Claude
+    sub_agents: [coder, helper]
+  coder:
+    model: gpt          # coder uses GPT-4o
+  helper:
+    model: local        # helper runs locally for free
+```
+
+<Tip>
+  Use expensive models for complex reasoning and cheaper or local models for routine subtasks. See [Multi-agent](/concepts/multi-agent) for orchestration patterns.
+</Tip>
+
+## Switching providers without changing agent logic
+
+Because agents reference models by name — not by hardcoded provider strings — you can swap the underlying provider without touching the agent's instructions, tools, or structure. Just update the model definition.
+
+```yaml
+models:
+  main:
+    provider: anthropic     # change this to openai, google, etc.
+    model: claude-sonnet-4-0
+
+agents:
+  root:
+    model: main             # agent logic unchanged
+```

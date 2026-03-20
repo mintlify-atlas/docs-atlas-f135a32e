@@ -1,0 +1,212 @@
+---
+title: "Models"
+description: "Models are the AI engines behind your agents. Docker Agent supports multiple providers and flexible configuration via inline references or named model definitions."
+---
+
+Every agent requires a model. You can reference a model inline with a short `provider/model-name` string, or define named models in a top-level `models` map for reuse and fine-grained configuration.
+
+## Inline model references
+
+The quickest way to assign a model is the `provider/model-name` shorthand directly on the agent:
+
+```yaml agent.yaml
+agents:
+  root:
+    model: openai/gpt-4o
+    instruction: You are a helpful assistant.
+```
+
+This works for any provider. The format is always `<provider-key>/<model-name>`.
+
+## Named models
+
+For reusable configuration or advanced options, define models in the top-level `models` section and reference them by name:
+
+```yaml agent.yaml
+models:
+  claude:
+    provider: anthropic
+    model: claude-sonnet-4-0
+    max_tokens: 64000
+    temperature: 0.7
+
+agents:
+  root:
+    model: claude
+    instruction: You are a helpful assistant.
+```
+
+Named models let you configure temperature, token limits, thinking budgets, and other parameters, and reuse the same model definition across multiple agents.
+
+## Model fields
+
+<ParamField path="provider" type="string" required>
+  Provider identifier. See [supported providers](#supported-providers) below.
+</ParamField>
+
+<ParamField path="model" type="string" required>
+  Model name as understood by the provider (e.g., `claude-sonnet-4-0`, `gpt-4o`).
+</ParamField>
+
+<ParamField path="temperature" type="number">
+  Randomness of responses. Range 0.0 (deterministic) to 1.0 (creative). Provider defaults apply when omitted.
+</ParamField>
+
+<ParamField path="max_tokens" type="number">
+  Maximum number of tokens in the model's response.
+</ParamField>
+
+<ParamField path="top_p" type="number">
+  Nucleus sampling probability. Range 0.0 to 1.0.
+</ParamField>
+
+<ParamField path="frequency_penalty" type="number">
+  Reduces repetition of token sequences. Range 0.0 to 2.0.
+</ParamField>
+
+<ParamField path="presence_penalty" type="number">
+  Encourages the model to introduce new topics. Range 0.0 to 2.0.
+</ParamField>
+
+<ParamField path="thinking_budget" type="string | number">
+  Controls how much the model reasons before responding. Accepts a string effort level or an integer token count. See [thinking budget](#thinking-budget) below.
+</ParamField>
+
+<ParamField path="base_url" type="string">
+  Custom API endpoint. Useful for proxies, gateways, or self-hosted models.
+</ParamField>
+
+<ParamField path="token_key" type="string">
+  Environment variable name containing the API token. Overrides the provider default.
+</ParamField>
+
+<ParamField path="parallel_tool_calls" type="boolean">
+  Whether the model can issue multiple tool calls in a single turn.
+</ParamField>
+
+<ParamField path="provider_opts" type="object">
+  Arbitrary provider-specific options passed through to the API.
+</ParamField>
+
+## Supported providers
+
+| Provider | Key | Example models | API key env var |
+| --- | --- | --- | --- |
+| OpenAI | `openai` | `gpt-4o`, `gpt-5`, `gpt-5-mini` | `OPENAI_API_KEY` |
+| Anthropic | `anthropic` | `claude-sonnet-4-0`, `claude-sonnet-4-5` | `ANTHROPIC_API_KEY` |
+| Google | `google` | `gemini-2.5-flash`, `gemini-3-pro` | `GOOGLE_API_KEY` |
+| AWS Bedrock | `amazon-bedrock` | Claude, Nova, Llama models | AWS credentials |
+| Docker Model Runner | `dmr` | `ai/qwen3`, `ai/llama3.2` | None (local) |
+| Mistral | `mistral` | Mistral models | `MISTRAL_API_KEY` |
+| xAI | `xai` | Grok models | `XAI_API_KEY` |
+
+See [Model Providers](/providers/overview) for detailed setup guides.
+
+## Thinking budget
+
+Control how much the model reasons before responding. The accepted values depend on the provider:
+
+| Provider | Format | Values | Default |
+| --- | --- | --- | --- |
+| OpenAI | string | `minimal`, `low`, `medium`, `high` | `medium` |
+| Anthropic | integer | 1024–32768 tokens | 8192 |
+| Gemini 2.5 | integer | `0` (off), `-1` (dynamic), or token count | `-1` (dynamic) |
+| Gemini 3 | string | `minimal`, `low`, `medium`, `high` | varies |
+| All | string | `none` or `0` to disable thinking | — |
+
+```yaml agent.yaml
+models:
+  deep-thinker:
+    provider: anthropic
+    model: claude-sonnet-4-5
+    thinking_budget: 16384  # integer token budget
+
+  fast-responder:
+    provider: openai
+    model: gpt-5-mini
+    thinking_budget: none   # disable thinking entirely
+```
+
+## Fallback models
+
+Configure fallback models on an agent for automatic failover when the primary is unavailable:
+
+```yaml agent.yaml
+agents:
+  root:
+    model: anthropic/claude-sonnet-4-0
+    fallback:
+      models:
+        - openai/gpt-4o
+        - google/gemini-2.5-flash
+      retries: 2
+      cooldown: 1m
+```
+
+See [Agent fallbacks](/concepts/agents#model-fallbacks) for the full field reference.
+
+## Alloy models
+
+You can assign multiple models to a single agent by comma-separating them. Docker Agent alternates between them turn by turn, leveraging the strengths of each:
+
+```yaml agent.yaml
+agents:
+  root:
+    model: anthropic/claude-sonnet-4-0,openai/gpt-5-mini
+    instruction: You are a helpful assistant.
+```
+
+## Multi-provider teams
+
+Different agents in the same config can use different providers. Use named models to keep the config readable:
+
+```yaml dev-team.yaml
+models:
+  fast:
+    provider: openai
+    model: gpt-5-mini
+    temperature: 0.2
+
+  creative:
+    provider: openai
+    model: gpt-4o
+    temperature: 0.8
+
+  local:
+    provider: dmr
+    model: ai/qwen3  # runs locally, no API cost
+
+agents:
+  analyst:
+    model: fast
+    instruction: Analyze requirements precisely.
+
+  writer:
+    model: creative
+    instruction: Write engaging documentation.
+
+  helper:
+    model: local
+    instruction: Handle simple formatting tasks.
+```
+
+<Note>
+  Agents in a multi-agent config can freely mix providers. This lets you use fast cheap models for simple tasks and powerful models only where needed.
+</Note>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Model providers" icon="plug" href="/providers/overview">
+    Setup guides for every supported provider.
+  </Card>
+  <Card title="Model configuration reference" icon="gear" href="/configuration/models">
+    Full reference for model config fields.
+  </Card>
+  <Card title="Multi-Agent" icon="diagram-project" href="/concepts/multi-agent">
+    Use different models for different agent roles.
+  </Card>
+  <Card title="Agents" icon="robot" href="/concepts/agents">
+    How agents use models and configure fallbacks.
+  </Card>
+</CardGroup>

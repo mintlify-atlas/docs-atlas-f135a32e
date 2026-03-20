@@ -1,0 +1,89 @@
+---
+title: "Background agents"
+description: "Dispatch work to sub-agents concurrently and collect results asynchronously."
+---
+
+The background agents tool lets an orchestrator dispatch work to sub-agents concurrently and collect results asynchronously. Unlike [transfer_task](/tools/transfer-task) — which blocks until the sub-agent finishes — background agent tasks run in parallel. The orchestrator can start several tasks, do other work, and check on them later.
+
+## Available tools
+
+| Tool | Description |
+| --- | --- |
+| `run_background_agent` | Start a sub-agent task in the background. Returns a task ID immediately. |
+| `list_background_agents` | List all background tasks with their current status and runtime. |
+| `view_background_agent` | View the live output or final result of a task by ID. |
+| `stop_background_agent` | Cancel a running task by ID. |
+
+## Configuration
+
+```yaml
+toolsets:
+  - type: background_agents
+```
+
+The background agents tool has no configuration options. The agent must have `sub_agents` configured so there are agents to dispatch to.
+
+## Example agent
+
+```yaml background_agents.yaml
+agents:
+  root:
+    model: anthropic/claude-sonnet-4-0
+    description: Research coordinator that dispatches work in parallel
+    instruction: |
+      You are a research coordinator. When the user asks a question:
+      1. Break the question into independent research tasks.
+      2. Dispatch each task using run_background_agent so they run in parallel.
+      3. Use list_background_agents or view_background_agent to check progress.
+      4. Synthesize the findings into a clear, well-structured answer.
+      Always run independent tasks concurrently.
+    sub_agents: [web_researcher, code_analyst]
+    toolsets:
+      - type: think
+      - type: background_agents
+
+  web_researcher:
+    model: openai/gpt-4o
+    description: Searches the web for information and summarizes findings
+    instruction: Search the web for relevant, up-to-date information.
+    toolsets:
+      - type: mcp
+        ref: docker:duckduckgo
+
+  code_analyst:
+    model: anthropic/claude-sonnet-4-0
+    description: Analyzes local code and provides technical insights
+    instruction: Read the codebase to answer technical questions.
+    toolsets:
+      - type: filesystem
+      - type: shell
+```
+
+## Background agents vs. transfer task
+
+| | `background_agents` | `transfer_task` |
+| --- | --- | --- |
+| **Execution** | Parallel — all tasks run concurrently | Sequential — orchestrator waits for each task |
+| **Returns** | Task ID immediately | Final result when done |
+| **Best for** | Fan-out to multiple independent specialists | Delegating a single task to one specialist |
+
+<Tip>
+  Use `background_agents` when your orchestrator needs to fan out work to multiple specialists — for example, researching several topics simultaneously or running independent code analyses side by side. Use `transfer_task` when you need the result before continuing.
+</Tip>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Transfer task" icon="arrow-right" href="/tools/transfer-task">
+    Delegate tasks synchronously to sub-agents.
+  </Card>
+  <Card title="Think" icon="brain" href="/tools/think">
+    Plan how to divide work before dispatching.
+  </Card>
+  <Card title="Multi-agent" icon="network" href="/concepts/multi-agent">
+    Multi-agent architecture patterns.
+  </Card>
+  <Card title="Todo" icon="list-checks" href="/tools/todo">
+    Track task progress across agents.
+  </Card>
+</CardGroup>

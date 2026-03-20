@@ -1,0 +1,268 @@
+---
+title: "RAG (Retrieval-Augmented Generation)"
+description: "Give your agents access to document knowledge bases with background indexing, multiple retrieval strategies, and hybrid search."
+---
+
+RAG lets agents search through your documents to find relevant information before responding. Docker Agent supports:
+
+- **Background indexing** — files are indexed automatically and re-indexed on change
+- **Multiple strategies** — semantic embeddings, BM25 keyword search, and LLM-enhanced semantic search
+- **Hybrid search** — combine strategies with result fusion for best recall
+- **Reranking** — re-score results with a model for improved relevance
+
+## Quick start
+
+```yaml
+rag:
+  my_docs:
+    tool:
+      description: "Technical documentation"
+    docs: [./documents, ./some-doc.md]
+    strategies:
+      - type: chunked-embeddings
+        embedding_model: openai/text-embedding-3-small
+        database: ./docs.db
+        vector_dimensions: 1536
+
+agents:
+  root:
+    model: openai/gpt-4o
+    instruction: |
+      You have access to a knowledge base. Use it to answer questions.
+    rag: [my_docs]
+```
+
+## Retrieval strategies
+
+### Chunked embeddings (semantic search)
+
+Uses an embedding model to find semantically similar content. Best for understanding intent, synonyms, and paraphrasing.
+
+```yaml
+strategies:
+  - type: chunked-embeddings
+    embedding_model: openai/text-embedding-3-small
+    database: ./vector.db
+    vector_dimensions: 1536
+    similarity_metric: cosine_similarity
+    threshold: 0.5
+    limit: 10
+    batch_size: 50
+    max_embedding_concurrency: 3
+    chunking:
+      size: 1000
+      overlap: 100
+      respect_word_boundaries: true
+```
+
+### Semantic embeddings (LLM-enhanced)
+
+Uses an LLM to generate semantic summaries of each chunk before embedding. Captures meaning and intent rather than literal text. Best for code search.
+
+```yaml
+strategies:
+  - type: semantic-embeddings
+    embedding_model: openai/text-embedding-3-small
+    vector_dimensions: 1536
+    chat_model: openai/gpt-4o-mini
+    database: ./semantic.db
+    ast_context: true
+    chunking:
+      size: 1000
+      code_aware: true
+```
+
+<Note>
+  Semantic embeddings provide higher quality retrieval but slower indexing (one LLM call per chunk) and additional API costs.
+</Note>
+
+### BM25 (keyword search)
+
+Traditional keyword matching using the BM25 algorithm. Best for exact terms, technical jargon, and code identifiers.
+
+```yaml
+strategies:
+  - type: bm25
+    database: ./bm25.db
+    k1: 1.5
+    b: 0.75
+    threshold: 0.3
+    limit: 10
+    chunking:
+      size: 1000
+      overlap: 100
+      respect_word_boundaries: true
+```
+
+## Hybrid search
+
+Combine multiple strategies. Results run in parallel and are fused together:
+
+```yaml
+rag:
+  knowledge_base:
+    tool:
+      description: Search for information about blorks
+    docs:
+      - ./blork_field_guide.txt
+    strategies:
+      - type: chunked-embeddings
+        embedding_model: openai/text-embedding-3-small
+        docs:
+          - ./docs
+        database: ./chunked_embeddings.db
+        similarity_metric: cosine_similarity
+        threshold: 0.5
+        limit: 20
+        vector_dimensions: 1536
+        chunking:
+          size: 1000
+          overlap: 100
+      - type: bm25
+        docs:
+          - ./docs
+        database: ./bm25.db
+        k1: 1.5
+        b: 0.75
+        threshold: 0.3
+        limit: 15
+        chunking:
+          size: 1000
+          overlap: 100
+    results:
+      fusion:
+        strategy: rrf
+        k: 60
+      deduplicate: true
+      limit: 5
+```
+
+## Fusion strategies
+
+| Strategy | Best for | Description |
+| -------- | -------- | ----------- |
+| `rrf` | General use (recommended) | Reciprocal Rank Fusion — rank-based, no score normalization needed |
+| `weighted` | Known performance characteristics | Weight strategies differently (e.g., embeddings 0.7, BM25 0.3) |
+| `max` | Same scoring scale | Takes the maximum score from any strategy |
+
+## Reranking
+
+Re-score retrieved results with a model to improve relevance. Happens after retrieval and fusion, before the final limit.
+
+```yaml
+results:
+  reranking:
+    model: openai/gpt-4.1-nano
+    top_k: 10
+    threshold: 0.3
+    criteria: |
+      Prioritize official documentation over blog posts.
+      Prefer recent information and practical examples.
+  deduplicate: true
+  limit: 5
+```
+
+Supported reranking providers: **DMR** (native `/rerank` endpoint), **OpenAI**, **Anthropic**, **Google Gemini**.
+
+<Tip>
+  To use DMR for reranking, pull a reranking model first:
+  ```bash
+  docker model pull hf.co/ggml-org/Qwen3-Reranker-0.6B-Q8_0-GGUF
+  ```
+  If reranking fails, the system falls back to original retrieval scores.
+</Tip>
+
+## Code-aware chunking
+
+For source code, enable AST-based chunking to keep functions and methods intact:
+
+```yaml
+chunking:
+  size: 2000
+  code_aware: true
+```
+
+<Note>
+  Currently supports Go (`.go`) files via tree-sitter. Other file types fall back to plain-text chunking.
+</Note>
+
+## Debugging RAG
+
+```bash
+docker agent run config.yaml --debug --log-file debug.log
+```
+
+Search the log for tags: `[RAG Manager]`, `[Chunked-Embeddings Strategy]`, `[BM25 Strategy]`, `[RRF Fusion]`, `[Reranker]`.
+
+## Configuration reference
+
+### Top-level fields
+
+| Field | Type | Default | Description |
+| ----- | ---- | ------- | ----------- |
+| `docs` | `[]string` | — | Document paths/directories shared across strategies |
+| `tool.description` | `string` | — | Description of the RAG tool shown to the agent |
+| `respect_vcs` | `boolean` | `true` | Respect `.gitignore` when indexing |
+| `strategies` | `[]object` | — | Array of retrieval strategy configurations |
+| `results` | `object` | — | Post-processing: fusion, reranking, deduplication, final limit |
+
+### Chunked-embeddings strategy
+
+| Field | Type | Default | Description |
+| ----- | ---- | ------- | ----------- |
+| `embedding_model` | `string` | — | **Required.** Embedding model reference |
+| `database` | `string` | — | Path to local SQLite database |
+| `vector_dimensions` | `int` | — | Embedding dimensions (e.g., `1536` for `text-embedding-3-small`) |
+| `similarity_metric` | `string` | `cosine_similarity` | Similarity metric |
+| `threshold` | `float` | `0.5` | Minimum similarity score (0–1) |
+| `limit` | `int` | `5` | Max results from this strategy |
+| `batch_size` | `int` | `50` | Chunks per embedding request |
+| `max_embedding_concurrency` | `int` | `3` | Max concurrent embedding requests |
+| `chunking.size` | `int` | `1000` | Chunk size in characters |
+| `chunking.overlap` | `int` | `75` | Overlap between chunks in characters |
+| `chunking.code_aware` | `bool` | `false` | AST-based chunking (Go files) |
+| `chunking.respect_word_boundaries` | `bool` | `false` | Avoid splitting mid-word |
+
+### Semantic-embeddings strategy
+
+| Field | Type | Default | Description |
+| ----- | ---- | ------- | ----------- |
+| `embedding_model` | `string` | — | **Required.** Embedding model reference |
+| `chat_model` | `string` | — | **Required.** LLM for generating semantic summaries |
+| `vector_dimensions` | `int` | — | **Required.** Embedding dimensions |
+| `database` | `string` | — | Path to local SQLite database |
+| `semantic_prompt` | `string` | (built-in) | Custom prompt template (`${path}`, `${content}`, `${ast_context}`) |
+| `ast_context` | `bool` | `false` | Include tree-sitter AST metadata in prompts |
+| `threshold` | `float` | `0.5` | Minimum similarity score |
+| `limit` | `int` | `5` | Max results |
+| `max_indexing_concurrency` | `int` | `3` | Max concurrent file indexing |
+| `chunking.size` | `int` | `1000` | Chunk size in characters |
+| `chunking.overlap` | `int` | `75` | Overlap between chunks |
+| `chunking.code_aware` | `bool` | `false` | AST-based chunking |
+
+### BM25 strategy
+
+| Field | Type | Default | Description |
+| ----- | ---- | ------- | ----------- |
+| `database` | `string` | — | Path to local SQLite database |
+| `k1` | `float` | `1.5` | Term frequency saturation (1.2–2.0 recommended) |
+| `b` | `float` | `0.75` | Length normalization (0–1) |
+| `threshold` | `float` | `0.0` | Minimum BM25 score |
+| `limit` | `int` | `5` | Max results |
+| `chunking.size` | `int` | `1000` | Chunk size in characters |
+| `chunking.overlap` | `int` | `75` | Overlap between chunks |
+
+### Results (post-processing)
+
+| Field | Type | Default | Description |
+| ----- | ---- | ------- | ----------- |
+| `fusion.strategy` | `string` | `rrf` | Fusion method: `rrf`, `weighted`, or `max` |
+| `fusion.k` | `int` | `60` | RRF rank constant |
+| `deduplicate` | `bool` | `true` | Remove duplicate results |
+| `limit` | `int` | `15` | Final number of results to return |
+| `include_score` | `bool` | `false` | Include relevance scores in results |
+| `return_full_content` | `bool` | `false` | Return full document instead of matched chunks |
+| `reranking.model` | `string` | — | Reranking model reference |
+| `reranking.top_k` | `int` | (all) | Only rerank the top K results |
+| `reranking.threshold` | `float` | `0.5` | Minimum relevance score after reranking |
+| `reranking.criteria` | `string` | — | Custom relevance guidance for the reranking model |

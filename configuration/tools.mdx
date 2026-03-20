@@ -1,0 +1,362 @@
+---
+title: "Tool configuration"
+description: "Complete reference for configuring built-in tools, MCP tools, and Docker-based tools."
+---
+
+Tools are configured in an agent's `toolsets` array. Each entry is an object with at minimum a `type` field.
+
+```yaml
+agents:
+  root:
+    toolsets:
+      - type: filesystem
+      - type: shell
+      - type: memory
+        path: ./dev.db
+```
+
+## Built-in tools
+
+Built-in tools are included with docker-agent and require no external dependencies.
+
+| Type | Description | Page |
+| ---- | ----------- | ---- |
+| `filesystem` | Read, write, list, search, and navigate files | [Filesystem](/tools/filesystem) |
+| `shell` | Execute shell commands | [Shell](/tools/shell) |
+| `think` | Reasoning scratchpad (no side effects) | [Think](/tools/think) |
+| `todo` | Task list management | [Todo](/tools/todo) |
+| `memory` | Persistent key-value storage (SQLite) | [Memory](/tools/memory) |
+| `fetch` | HTTP requests | [Fetch](/tools/fetch) |
+| `script` | Custom shell scripts exposed as tools | [Script](/tools/script) |
+| `lsp` | Language Server Protocol integration | [LSP](/tools/lsp) |
+| `api` | Custom HTTP API tools | [API](/tools/api) |
+| `user_prompt` | Interactive user input prompts | [User Prompt](/tools/user-prompt) |
+| `transfer_task` | Delegate to sub-agents (auto-enabled with `sub_agents`) | [Transfer Task](/tools/transfer-task) |
+| `background_agents` | Dispatch sub-agents in parallel | [Background Agents](/tools/background-agents) |
+| `handoff` | A2A remote agent delegation | [Handoff](/tools/handoff) |
+| `a2a` | Connect to an A2A remote agent | [A2A](/tools/a2a) |
+
+### Common toolset fields
+
+The following fields apply to all toolset types:
+
+<ParamField path="type" type="string" required>
+  The toolset type. See the table above for all valid values.
+</ParamField>
+
+<ParamField path="tools" type="string[]">
+  Whitelist of tool names to expose from this toolset. If omitted, all tools from the toolset are available. See [Tool filtering](#tool-filtering).
+</ParamField>
+
+<ParamField path="instruction" type="string">
+  Additional instructions injected into the agent's system prompt when this toolset is loaded. Useful for guiding how and when to use the tools.
+</ParamField>
+
+<ParamField path="model" type="string">
+  Override the model used for turns that process results from this toolset. Enables per-toolset model routing. Value can be a named model or inline `provider/model` string.
+</ParamField>
+
+<ParamField path="defer" type="boolean | string[]">
+  Defer tool loading until first use. Pass `true` to defer all tools, or a list of tool names to defer specific tools. See [Deferred tool loading](#deferred-tool-loading).
+</ParamField>
+
+### Filesystem-specific fields
+
+<ParamField path="post_edit" type="array">
+  List of commands to run after a file is edited. Each entry has `path` (glob pattern to match file paths) and `cmd` (shell command to execute).
+</ParamField>
+
+<ParamField path="ignore_vcs" type="boolean">
+  When `true`, the filesystem tool ignores VCS files (e.g., `.gitignore` rules). Default is to respect VCS.
+</ParamField>
+
+### Memory-specific fields
+
+<ParamField path="path" type="string">
+  Path to the SQLite database file for persistent storage. Default is an in-memory database.
+</ParamField>
+
+### Shell-specific fields
+
+<ParamField path="env" type="object">
+  Environment variables to set for shell commands. Key-value pairs.
+</ParamField>
+
+### Script-specific fields
+
+<ParamField path="shell" type="object">
+  Map of script tool definitions. Each key becomes the tool name. See [Script tool](/tools/script) for full options.
+</ParamField>
+
+### Todo-specific fields
+
+<ParamField path="shared" type="boolean" default="false">
+  When `true`, the todo list is shared across all agents in the session.
+</ParamField>
+
+### Fetch-specific fields
+
+<ParamField path="timeout" type="number">
+  HTTP request timeout in seconds.
+</ParamField>
+
+### API-specific fields
+
+<ParamField path="api_config" type="object">
+  HTTP API tool definition. See [API tool](/tools/api) for full options.
+</ParamField>
+
+### LSP-specific fields
+
+<ParamField path="command" type="string">
+  The LSP server command to run.
+</ParamField>
+
+<ParamField path="file_types" type="string[]">
+  File extensions this LSP server handles (e.g., `[".go", ".ts"]`).
+</ParamField>
+
+<ParamField path="version" type="string">
+  Package reference for auto-installing the LSP binary. Format: `owner/repo` or `owner/repo@version`.
+</ParamField>
+
+## MCP tools
+
+Extend agents with external tools via the [Model Context Protocol](https://modelcontextprotocol.io/).
+
+### Docker MCP (recommended)
+
+Run MCP servers as secure Docker containers via the MCP Gateway:
+
+```yaml
+toolsets:
+  - type: mcp
+    ref: docker:duckduckgo      # web search
+  - type: mcp
+    ref: docker:github-official # GitHub integration
+    tools: ["list_issues", "create_issue"]
+```
+
+Browse available tools at the [Docker MCP Catalog](https://hub.docker.com/search?q=&type=mcp).
+
+<ParamField path="ref" type="string">
+  Docker MCP reference in `docker:name` format.
+</ParamField>
+
+<ParamField path="config" type="any">
+  MCP server-specific configuration passed during initialization.
+</ParamField>
+
+### Local MCP (stdio)
+
+Run MCP servers as local processes communicating over stdin/stdout:
+
+```yaml
+toolsets:
+  - type: mcp
+    command: python
+    args: ["-m", "mcp_server"]
+    tools: ["search", "fetch"]
+    env:
+      API_KEY: value
+```
+
+<ParamField path="command" type="string">
+  Command to execute the MCP server process.
+</ParamField>
+
+<ParamField path="args" type="string[]">
+  Command-line arguments passed to the MCP server.
+</ParamField>
+
+<ParamField path="env" type="object">
+  Environment variables for the MCP server process.
+</ParamField>
+
+<ParamField path="version" type="string">
+  Package reference for auto-installing the command binary. Format: `owner/repo` or `owner/repo@version`. Set to `"false"` or `"off"` to disable auto-install.
+</ParamField>
+
+### Remote MCP (SSE / Streamable HTTP)
+
+Connect to MCP servers over the network:
+
+```yaml
+toolsets:
+  - type: mcp
+    remote:
+      url: "https://mcp-server.example.com"
+      transport_type: "sse"
+      headers:
+        Authorization: "Bearer your-token"
+    tools: ["search_web", "fetch_url"]
+```
+
+<ParamField path="remote.url" type="string">
+  Base URL of the remote MCP server.
+</ParamField>
+
+<ParamField path="remote.transport_type" type="string">
+  Transport protocol: `sse` or `streamable`.
+</ParamField>
+
+<ParamField path="remote.headers" type="object">
+  HTTP headers sent with every request (typically for authentication).
+</ParamField>
+
+### Reusable MCP definitions
+
+Define MCP servers once in the top-level `mcps` section and reference them from multiple agents:
+
+```yaml
+mcps:
+  github:
+    ref: docker:github-official
+    tools: ["list_issues", "create_issue", "get_pull_request"]
+
+  search:
+    ref: docker:duckduckgo
+
+agents:
+  root:
+    toolsets:
+      - type: mcp
+        ref: github     # references the mcps section
+      - type: mcp
+        ref: search
+```
+
+## Tool filtering
+
+Use the `tools` property to expose only a subset of tools from a toolset. This reduces context window usage and improves tool selection accuracy:
+
+```yaml
+toolsets:
+  - type: mcp
+    ref: docker:github-official
+    tools: ["list_issues", "create_issue", "get_pull_request"]
+  - type: filesystem
+    tools: ["read_file", "search_files_content"]
+  - type: shell
+    tools: ["shell"]
+```
+
+<Tip>
+  Filtering tools improves agent performance — fewer tools means less confusion for the model about which one to use.
+</Tip>
+
+## Deferred tool loading
+
+Deferred tools are loaded on-demand rather than at startup. This reduces startup time when you have many toolsets, especially slow-initializing MCP servers:
+
+```yaml
+toolsets:
+  - type: mcp
+    ref: docker:github-official
+    defer: true          # all tools deferred
+  - type: mcp
+    ref: docker:slack
+    defer: true
+  - type: filesystem     # loaded immediately
+```
+
+Defer specific tools within a toolset:
+
+```yaml
+toolsets:
+  - type: mcp
+    ref: docker:github-official
+    defer:
+      - "list_issues"
+      - "search_repos"
+```
+
+## Auto-installing tools
+
+When a toolset specifies a `command` (for MCP or LSP), docker-agent can automatically download and install the binary if it is not found on your `PATH`.
+
+**Resolution order:**
+1. Check `PATH` for the command
+2. Check the docker-agent tools directory (`~/.cagent/tools/bin/`)
+3. Look up the command in the [aqua registry](https://github.com/aquaproj/aqua-registry) and install it
+
+Specify an explicit package reference with `version`:
+
+```yaml
+toolsets:
+  - type: mcp
+    command: gopls
+    version: "golang/tools@v0.21.0"
+    args: ["mcp"]
+```
+
+The format is `owner/repo` or `owner/repo@version`. When `version` is omitted, the latest release is used.
+
+| Variable                    | Default              | Description                                     |
+| --------------------------- | -------------------- | ----------------------------------------------- |
+| `DOCKER_AGENT_AUTO_INSTALL` | enabled              | Set to `false` to disable all auto-installation |
+| `DOCKER_AGENT_TOOLS_DIR`    | `~/.cagent/tools/`   | Base directory for installed tools              |
+| `GITHUB_TOKEN`              | —                    | Raises GitHub API rate limits (optional)        |
+
+Disable auto-install for a specific toolset:
+
+```yaml
+toolsets:
+  - type: mcp
+    command: my-custom-server
+    version: "false"  # disables auto-install for this toolset
+```
+
+<Warning>
+  If multiple toolsets expose a tool with the same name, the first one wins. Order your toolsets intentionally.
+</Warning>
+
+## Combined example
+
+```yaml
+agents:
+  root:
+    model: anthropic/claude-sonnet-4-0
+    description: Full-featured developer assistant
+    instruction: You are an expert developer.
+    toolsets:
+      # Built-in tools
+      - type: filesystem
+      - type: shell
+      - type: think
+      - type: todo
+      - type: memory
+        path: ./dev.db
+      - type: user_prompt
+
+      # LSP for code intelligence
+      - type: lsp
+        command: gopls
+        file_types: [".go"]
+
+      # Custom shell scripts as tools
+      - type: script
+        shell:
+          run_tests:
+            description: Run the test suite
+            cmd: task test
+          lint:
+            description: Run the linter
+            cmd: task lint
+
+      # Docker MCP tools
+      - type: mcp
+        ref: docker:github-official
+        tools: ["list_issues", "create_issue"]
+        defer: true
+      - type: mcp
+        ref: docker:duckduckgo
+
+      # Remote MCP
+      - type: mcp
+        remote:
+          url: "https://internal-api.example.com/mcp"
+          transport_type: "sse"
+          headers:
+            Authorization: "Bearer ${INTERNAL_TOKEN}"
+```

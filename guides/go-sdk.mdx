@@ -1,0 +1,374 @@
+---
+title: "Go SDK"
+description: "Use docker-agent as a Go library to embed AI agents in your applications."
+---
+
+docker-agent is available as a Go library. You can import it directly into your application to build, configure, and run AI agents programmatically — without the CLI or TUI.
+
+## Installation
+
+<Steps>
+  <Step title="Add the module to your project">
+    ```bash
+    go get github.com/docker/docker-agent
+    ```
+  </Step>
+  <Step title="Import the packages you need">
+    ```go
+    import (
+        "github.com/docker/docker-agent/pkg/agent"
+        "github.com/docker/docker-agent/pkg/runtime"
+        "github.com/docker/docker-agent/pkg/session"
+        "github.com/docker/docker-agent/pkg/team"
+    )
+    ```
+  </Step>
+</Steps>
+
+<Note>
+  The module path is `github.com/docker/docker-agent`. All public packages live under `pkg/`.
+</Note>
+
+## Core packages
+
+| Package | Purpose |
+| --- | --- |
+| `pkg/agent` | Agent creation and configuration |
+| `pkg/runtime` | Agent execution and event streaming |
+| `pkg/session` | Conversation state management |
+| `pkg/team` | Multi-agent team composition |
+| `pkg/tools` | Tool interface and utilities |
+| `pkg/tools/builtin` | Built-in tools (shell, filesystem, etc.) |
+| `pkg/model/provider/*` | Model provider clients |
+| `pkg/config/latest` | Configuration types |
+| `pkg/environment` | Environment and secrets |
+
+## Basic example
+
+Create a simple agent, run it with a message, and print the response:
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "log"
+    "os/signal"
+    "syscall"
+
+    "github.com/docker/docker-agent/pkg/agent"
+    "github.com/docker/docker-agent/pkg/config/latest"
+    "github.com/docker/docker-agent/pkg/environment"
+    "github.com/docker/docker-agent/pkg/model/provider/openai"
+    "github.com/docker/docker-agent/pkg/runtime"
+    "github.com/docker/docker-agent/pkg/session"
+    "github.com/docker/docker-agent/pkg/team"
+)
+
+func main() {
+    ctx, cancel := signal.NotifyContext(context.Background(),
+        syscall.SIGINT, syscall.SIGTERM)
+    defer cancel()
+
+    if err := run(ctx); err != nil {
+        log.Fatal(err)
+    }
+}
+
+func run(ctx context.Context) error {
+    // Create a model provider
+    llm, err := openai.NewClient(
+        ctx,
+        &latest.ModelConfig{
+            Provider: "openai",
+            Model:    "gpt-4o",
+        },
+        environment.NewDefaultProvider(),
+    )
+    if err != nil {
+        return err
+    }
+
+    // Create an agent
+    assistant := agent.New(
+        "root",
+        "You are a helpful assistant.",
+        agent.WithModel(llm),
+        agent.WithDescription("A helpful assistant"),
+    )
+
+    // Wrap in a team and create the runtime
+    t := team.New(team.WithAgents(assistant))
+    rt, err := runtime.NewLocalRuntime(t)
+    if err != nil {
+        return err
+    }
+    defer rt.Close()
+
+    // Create a session with a user message
+    sess := session.New(
+        session.WithUserMessage("What is 2 + 2?"),
+    )
+
+    // Run and collect messages
+    messages, err := rt.Run(ctx, sess)
+    if err != nil {
+        return err
+    }
+
+    fmt.Println(messages[len(messages)-1].Message.Content)
+    return nil
+}
+```
+
+## Streaming responses
+
+Use `RunStream` to process events as they arrive. This is useful when you want to print tokens progressively or react to tool calls in real time.
+
+```go
+func runStreaming(ctx context.Context, rt runtime.Runtime, sess *session.Session) error {
+    events := rt.RunStream(ctx, sess)
+
+    for event := range events {
+        switch e := event.(type) {
+        case *runtime.StreamStartedEvent:
+            fmt.Println("Stream started")
+
+        case *runtime.AgentChoiceEvent:
+            // Print response tokens as they arrive
+            fmt.Print(e.Content)
+
+        case *runtime.ToolCallEvent:
+            fmt.Printf("\n[Tool call: %s]\n", e.ToolCall.Function.Name)
+
+        case *runtime.ToolCallConfirmationEvent:
+            // Auto-approve tool calls
+            rt.Resume(ctx, runtime.ResumeRequest{
+                Type: runtime.ResumeTypeApproveSession,
+            })
+
+        case *runtime.ToolCallResponseEvent:
+            fmt.Printf("[Tool response: %s]\n", e.Response)
+
+        case *runtime.StreamStoppedEvent:
+            fmt.Println("\nStream stopped")
+
+        case *runtime.ErrorEvent:
+            return fmt.Errorf("stream error: %s", e.Error)
+        }
+    }
+
+    return nil
+}
+```
+
+## Custom tools
+
+Define your own tools by implementing a handler function and describing the input schema:
+
+```go
+import (
+    "context"
+    "encoding/json"
+    "fmt"
+
+    "github.com/docker/docker-agent/pkg/tools"
+)
+
+type AddNumbersArgs struct {
+    A int `json:"a"`
+    B int `json:"b"`
+}
+
+func addNumbers(_ context.Context, toolCall tools.ToolCall) (*tools.ToolCallResult, error) {
+    var args AddNumbersArgs
+    if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &args); err != nil {
+        return nil, err
+    }
+    return tools.ResultSuccess(fmt.Sprintf("%d", args.A+args.B)), nil
+}
+
+// Create the tool definition
+addTool := tools.Tool{
+    Name:        "add",
+    Category:    "math",
+    Description: "Add two numbers together",
+    Parameters:  tools.MustSchemaFor[AddNumbersArgs](),
+    Handler:     addNumbers,
+}
+
+// Attach the tool to an agent
+calculator := agent.New(
+    "root",
+    "You are a calculator. Use the add tool for arithmetic.",
+    agent.WithModel(llm),
+    agent.WithTools(addTool),
+)
+```
+
+## Built-in tools
+
+The `pkg/tools/builtin` package provides ready-made toolsets you can attach to any agent:
+
+```go
+import (
+    "os"
+
+    "github.com/docker/docker-agent/pkg/config"
+    "github.com/docker/docker-agent/pkg/tools/builtin"
+)
+
+rtConfig := &config.RuntimeConfig{
+    Config: config.Config{
+        WorkingDir: "/path/to/workdir",
+    },
+}
+
+developer := agent.New(
+    "root",
+    "You are a developer assistant.",
+    agent.WithModel(llm),
+    agent.WithToolSets(
+        builtin.NewShellTool(os.Environ(), rtConfig, nil), // Run shell commands
+        builtin.NewFilesystemTool(rtConfig.Config.WorkingDir), // Read/write files
+        builtin.NewThinkTool(),  // Internal reasoning scratchpad
+        builtin.NewTodoTool(),   // Task tracking
+    ),
+)
+```
+
+## Multi-agent teams
+
+Create hierarchical agents where a root agent delegates work to specialists:
+
+```go
+import (
+    "github.com/docker/docker-agent/pkg/agent"
+    "github.com/docker/docker-agent/pkg/team"
+    "github.com/docker/docker-agent/pkg/tools/builtin"
+)
+
+func createTeam(llm provider.Provider) *team.Team {
+    researcher := agent.New(
+        "researcher",
+        "You research topics thoroughly.",
+        agent.WithModel(llm),
+        agent.WithDescription("Research specialist"),
+    )
+
+    coordinator := agent.New(
+        "root",
+        "You coordinate research tasks and delegate to specialists.",
+        agent.WithModel(llm),
+        agent.WithDescription("Team coordinator"),
+        agent.WithSubAgents(researcher),
+        agent.WithToolSets(builtin.NewTransferTaskTool()),
+    )
+
+    return team.New(team.WithAgents(coordinator, researcher))
+}
+```
+
+## Model providers
+
+Switch between providers by importing the appropriate package:
+
+```go
+import (
+    "github.com/docker/docker-agent/pkg/model/provider/anthropic"
+    "github.com/docker/docker-agent/pkg/model/provider/gemini"
+    "github.com/docker/docker-agent/pkg/model/provider/openai"
+)
+
+// OpenAI
+openaiClient, _ := openai.NewClient(ctx, &latest.ModelConfig{
+    Provider: "openai",
+    Model:    "gpt-4o",
+}, env)
+
+// Anthropic
+anthropicClient, _ := anthropic.NewClient(ctx, &latest.ModelConfig{
+    Provider: "anthropic",
+    Model:    "claude-sonnet-4-0",
+}, env)
+
+// Google Gemini
+geminiClient, _ := gemini.NewClient(ctx, &latest.ModelConfig{
+    Provider: "google",
+    Model:    "gemini-2.5-flash",
+}, env)
+```
+
+## Session options
+
+`session.New` accepts functional options to configure conversation behavior:
+
+```go
+sess := session.New(
+    session.WithTitle("Code Review Task"),
+    session.WithUserMessage("Review this code for bugs"),
+    session.WithMaxIterations(20),
+)
+```
+
+## Runtime options
+
+`runtime.NewLocalRuntime` accepts options for more advanced configurations:
+
+```go
+rt, err := runtime.NewLocalRuntime(
+    t,
+    runtime.WithSessionStore(myStore),    // Persistent session storage
+    runtime.WithWorkingDir("/workspace"), // Working directory for hooks
+    runtime.WithRetryOnRateLimit(),       // Retry on HTTP 429 with backoff
+    runtime.WithTracer(myTracer),         // OpenTelemetry tracing
+)
+```
+
+## Error handling
+
+```go
+messages, err := rt.Run(ctx, sess)
+if err != nil {
+    switch {
+    case errors.Is(err, context.Canceled):
+        log.Println("Operation cancelled")
+        return nil
+    case errors.Is(err, context.DeadlineExceeded):
+        log.Println("Operation timed out")
+        return nil
+    default:
+        return fmt.Errorf("runtime error: %w", err)
+    }
+}
+
+// Check for errors in the event stream
+for event := range rt.RunStream(ctx, sess) {
+    if errEvent, ok := event.(*runtime.ErrorEvent); ok {
+        return fmt.Errorf("stream error: %s", errEvent.Error)
+    }
+}
+```
+
+## Complete examples
+
+The [examples/golibrary](https://github.com/docker/docker-agent/tree/main/examples/golibrary) directory contains working programs for each use case:
+
+<CardGroup cols={2}>
+  <Card title="simple/" icon="play">
+    Basic agent with no tools — the minimal working example.
+  </Card>
+  <Card title="tool/" icon="wrench">
+    Custom tool implementation with schema generation.
+  </Card>
+  <Card title="stream/" icon="wave-sine">
+    Full streaming event loop with typed event handling.
+  </Card>
+  <Card title="multi/" icon="users">
+    Multi-agent team with coordinator and sub-agents.
+  </Card>
+  <Card title="builtintool/" icon="toolbox">
+    Using the built-in filesystem, shell, think, and todo tools.
+  </Card>
+</CardGroup>

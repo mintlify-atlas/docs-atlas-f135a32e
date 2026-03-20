@@ -1,0 +1,330 @@
+---
+title: "Hooks"
+description: "Run shell commands at lifecycle events to validate, log, block, or modify agent behavior."
+---
+
+Hooks let you execute shell commands at key points in an agent's lifecycle. They provide deterministic control that works alongside the LLM's behavior — useful for validation, logging, environment setup, notifications, and blocking dangerous operations.
+
+<Info>
+  Common use cases:
+
+  - Validate or transform tool inputs before execution
+  - Block dangerous operations based on custom rules
+  - Log all tool calls to an audit file
+  - Set up the environment when a session starts
+  - Send external notifications when errors occur
+  - Log model responses for analytics or compliance
+</Info>
+
+## Hook events
+
+There are seven hook events:
+
+| Event           | When it fires                                        | Can block? |
+| --------------- | ---------------------------------------------------- | ---------- |
+| `pre_tool_use`  | Before a tool call executes                          | Yes        |
+| `post_tool_use` | After a tool completes successfully                  | No         |
+| `session_start` | When a session begins or resumes                     | No         |
+| `session_end`   | When a session terminates                            | No         |
+| `on_user_input` | When the agent is waiting for user input             | No         |
+| `stop`          | When the model finishes responding                   | No         |
+| `notification`  | When the agent emits a notification (error/warning)  | No         |
+
+## Configuration
+
+Hooks are configured under `agents.<name>.hooks`:
+
+```yaml
+agents:
+  root:
+    model: openai/gpt-4o
+    description: Agent with hooks
+    instruction: You are a helpful assistant.
+    hooks:
+      pre_tool_use:
+        - matcher: "shell|edit_file"
+          hooks:
+            - type: command
+              command: "./scripts/validate.sh"
+              timeout: 30
+
+      post_tool_use:
+        - matcher: "*"
+          hooks:
+            - type: command
+              command: "./scripts/log.sh"
+
+      session_start:
+        - type: command
+          command: "./scripts/setup.sh"
+
+      session_end:
+        - type: command
+          command: "./scripts/cleanup.sh"
+
+      on_user_input:
+        - type: command
+          command: "./scripts/notify.sh"
+
+      stop:
+        - type: command
+          command: "./scripts/log-response.sh"
+
+      notification:
+        - type: command
+          command: "./scripts/alert.sh"
+```
+
+### Hook definition fields
+
+<ParamField path="type" type="string" required>
+  Hook type. Currently only `command` is supported.
+</ParamField>
+
+<ParamField path="command" type="string" required>
+  Shell command or inline shell script to execute. Multi-line scripts are supported using YAML block scalars (`|`).
+</ParamField>
+
+<ParamField path="timeout" type="number" default="60">
+  Execution timeout in seconds. The hook is killed if it exceeds this limit.
+</ParamField>
+
+### Matcher patterns
+
+`pre_tool_use` and `post_tool_use` hooks use a `matcher` field with regex patterns to match tool names:
+
+| Pattern             | Matches                          |
+| ------------------- | -------------------------------- |
+| `*`                 | All tools                        |
+| `shell`             | Only the `shell` tool            |
+| `shell\|edit_file`  | Either `shell` or `edit_file`    |
+| `mcp:.*`            | All MCP tools                    |
+
+## Hook input
+
+Hooks receive JSON on stdin with context about the event:
+
+```json
+{
+  "session_id": "abc123",
+  "cwd": "/path/to/project",
+  "hook_event_name": "pre_tool_use",
+  "tool_name": "shell",
+  "tool_use_id": "call_xyz",
+  "tool_input": {
+    "cmd": "rm -rf /tmp/cache"
+  }
+}
+```
+
+### Fields by event type
+
+| Field                    | pre_tool_use | post_tool_use | session_start | session_end | on_user_input | stop | notification |
+| ------------------------ | :----------: | :-----------: | :-----------: | :---------: | :-----------: | :--: | :----------: |
+| `session_id`             | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `cwd`                    | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `hook_event_name`        | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `tool_name`              | ✓ | ✓ |   |   |   |   |   |
+| `tool_use_id`            | ✓ | ✓ |   |   |   |   |   |
+| `tool_input`             | ✓ | ✓ |   |   |   |   |   |
+| `tool_response`          |   | ✓ |   |   |   |   |   |
+| `source`                 |   |   | ✓ |   |   |   |   |
+| `reason`                 |   |   |   | ✓ |   |   |   |
+| `stop_response`          |   |   |   |   |   | ✓ |   |
+| `notification_level`     |   |   |   |   |   |   | ✓ |
+| `notification_message`   |   |   |   |   |   |   | ✓ |
+
+**Notes:**
+- `source` for `session_start`: `startup`, `resume`, `clear`, or `compact`
+- `reason` for `session_end`: `clear`, `logout`, `prompt_input_exit`, or `other`
+- `notification_level`: `error` or `warning`
+
+## Hook output
+
+Hooks communicate back by writing JSON to stdout:
+
+```json
+{
+  "continue": true,
+  "stop_reason": "Optional message when continue=false",
+  "suppress_output": false,
+  "system_message": "Warning shown to user"
+}
+```
+
+| Field             | Type    | Description                                                 |
+| ----------------- | ------- | ----------------------------------------------------------- |
+| `continue`        | boolean | Whether to continue execution. Default: `true`.             |
+| `stop_reason`     | string  | Message displayed to the user when `continue` is `false`.  |
+| `suppress_output` | boolean | When `true`, hides the hook's stdout from the transcript.   |
+| `system_message`  | string  | Warning message displayed to the user.                      |
+
+### Pre-tool-use output
+
+`pre_tool_use` hooks support additional output via `hook_specific_output`:
+
+```json
+{
+  "hook_specific_output": {
+    "hook_event_name": "pre_tool_use",
+    "permission_decision": "deny",
+    "permission_decision_reason": "Dangerous command blocked",
+    "updated_input": { "cmd": "modified command" }
+  }
+}
+```
+
+| Field                        | Values                  | Description                                    |
+| ---------------------------- | ----------------------- | ---------------------------------------------- |
+| `permission_decision`        | `allow`, `deny`, `ask`  | Override the permission decision for this call |
+| `permission_decision_reason` | string                  | Explanation shown to the user                  |
+| `updated_input`              | object                  | Replacement tool input (replaces original)     |
+
+### Plain text output
+
+For `session_start`, `post_tool_use`, and `stop` hooks, plain text written to stdout (non-JSON) is captured and injected as additional context for the agent.
+
+## Exit codes
+
+| Exit code | Meaning                             |
+| --------- | ----------------------------------- |
+| `0`       | Success — continue normally         |
+| `2`       | Blocking error — stop the operation |
+| Other     | Error — logged, execution continues |
+
+<Warning>
+  Hooks run synchronously and add latency to every matched operation. Keep hook scripts fast. Use `suppress_output: true` for logging-only hooks.
+</Warning>
+
+<Info>
+  `session_end` hooks run even when the session is interrupted (e.g., Ctrl+C), subject to their configured timeout.
+</Info>
+
+## Examples
+
+### Block dangerous commands
+
+```yaml
+hooks:
+  pre_tool_use:
+    - matcher: "shell"
+      hooks:
+        - type: command
+          timeout: 10
+          command: |
+            INPUT=$(cat)
+            CMD=$(echo "$INPUT" | jq -r '.tool_input.cmd // ""')
+
+            if echo "$CMD" | grep -qiE 'rm\s+.*-rf|sudo|mkfs'; then
+              cat <<'EOF'
+            {"hook_specific_output":{"permission_decision":"deny","permission_decision_reason":"Dangerous command blocked by policy"}}
+            EOF
+              exit 2
+            fi
+
+            echo '{"continue": true}'
+```
+
+### Audit logging
+
+```yaml
+hooks:
+  post_tool_use:
+    - matcher: "*"
+      hooks:
+        - type: command
+          command: |
+            INPUT=$(cat)
+            TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+            TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name')
+            SESSION_ID=$(echo "$INPUT" | jq -r '.session_id')
+            echo "$TIMESTAMP | $SESSION_ID | $TOOL_NAME" >> ./audit.log
+            echo '{"continue": true}'
+```
+
+### Session lifecycle
+
+```yaml
+hooks:
+  session_start:
+    - type: command
+      timeout: 10
+      command: |
+        INPUT=$(cat)
+        SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // "unknown"')
+        echo "Session $SESSION_ID started at $(date)" >> /tmp/agent-session.log
+
+  session_end:
+    - type: command
+      timeout: 10
+      command: |
+        INPUT=$(cat)
+        SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // "unknown"')
+        REASON=$(echo "$INPUT" | jq -r '.reason // "unknown"')
+        echo "Session $SESSION_ID ended ($REASON) at $(date)" >> /tmp/agent-session.log
+```
+
+### Response logging (stop hook)
+
+```yaml
+hooks:
+  stop:
+    - type: command
+      timeout: 10
+      command: |
+        INPUT=$(cat)
+        SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // "unknown"')
+        RESPONSE_LENGTH=$(echo "$INPUT" | jq -r '.stop_response // ""' | wc -c | tr -d ' ')
+        echo "[$(date)] Session $SESSION_ID - Response: $RESPONSE_LENGTH chars" >> /tmp/responses.log
+```
+
+### Error notifications
+
+```yaml
+hooks:
+  notification:
+    - type: command
+      timeout: 10
+      command: |
+        INPUT=$(cat)
+        LEVEL=$(echo "$INPUT" | jq -r '.notification_level // "unknown"')
+        MESSAGE=$(echo "$INPUT" | jq -r '.notification_message // "no message"')
+        echo "[$(date)] [$LEVEL] $MESSAGE" >> /tmp/agent-notifications.log
+```
+
+The `notification` hook fires when:
+- All models fail to respond
+- A degenerate tool call loop is detected
+- The `max_iterations` limit is reached
+
+## CLI flags
+
+Add hooks from the command line without modifying the YAML file:
+
+| Flag                    | Description                            |
+| ----------------------- | -------------------------------------- |
+| `--hook-pre-tool-use`   | Run a command before every tool call   |
+| `--hook-post-tool-use`  | Run a command after every tool call    |
+| `--hook-session-start`  | Run a command when a session starts    |
+| `--hook-session-end`    | Run a command when a session ends      |
+| `--hook-on-user-input`  | Run a command when waiting for input   |
+
+All flags are repeatable.
+
+```bash
+# Add an audit hook without touching the YAML
+docker agent run agent.yaml --hook-post-tool-use "./audit.sh"
+
+# Combine multiple hooks
+docker agent run agent.yaml \
+  --hook-pre-tool-use "./validate.sh" \
+  --hook-post-tool-use "./log.sh"
+
+# Layer hooks onto a registry agent
+docker agent run agentcatalog/coder \
+  --hook-pre-tool-use "./audit.sh"
+```
+
+<Note>
+  CLI hooks are **appended** to hooks defined in the YAML config — they don't replace existing hooks. CLI pre/post-tool-use hooks match all tools (equivalent to `matcher: "*"`).
+</Note>

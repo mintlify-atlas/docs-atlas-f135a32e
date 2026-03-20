@@ -1,0 +1,178 @@
+---
+title: "API"
+description: "Define HTTP API calls as named tools with typed parameters."
+---
+
+The API tool type lets you define custom tools that make HTTP requests to external APIs. Each tool you define gets a name, a description, typed parameters, and a URL template. The agent calls these tools by name without needing to construct the HTTP request itself.
+
+This is useful for integrating agents with REST APIs that don't have an MCP server, and for quick prototyping before building a full MCP integration.
+
+## Configuration
+
+```yaml
+agents:
+  assistant:
+    model: openai/gpt-4o
+    description: Assistant with weather access
+    instruction: You can look up current weather information.
+    toolsets:
+      - type: api
+        api_config:
+          name: get_weather
+          method: GET
+          endpoint: "https://api.weather.example/v1/current?city=${city}"
+          instruction: Get current weather for a city
+          args:
+            city:
+              type: string
+              description: City name
+          required: [city]
+          headers:
+            Authorization: "Bearer ${env.WEATHER_API_KEY}"
+```
+
+## Properties
+
+<ParamField path="api_config.name" type="string" required>
+  Tool name. This is how the agent refers to the tool in calls.
+</ParamField>
+
+<ParamField path="api_config.method" type="string" required>
+  HTTP method. Supports `GET` and `POST`.
+</ParamField>
+
+<ParamField path="api_config.endpoint" type="string" required>
+  The URL. Use `${param}` to interpolate parameter values. For GET requests, parameters can be interpolated into the URL. For POST requests, parameters are sent as JSON in the request body.
+</ParamField>
+
+<ParamField path="api_config.instruction" type="string">
+  Description shown to the model. A clear description helps the agent choose the right tool and use it correctly.
+</ParamField>
+
+<ParamField path="api_config.args" type="object">
+  Parameter definitions as JSON Schema properties.
+</ParamField>
+
+<ParamField path="api_config.required" type="array">
+  List of required parameter names.
+</ParamField>
+
+<ParamField path="api_config.headers" type="object">
+  HTTP headers to include in every request. Use `${env.VAR}` to reference environment variables.
+</ParamField>
+
+<ParamField path="api_config.output_schema" type="object">
+  Optional JSON Schema describing the response structure. Useful for MCP and Code Mode consumers.
+</ParamField>
+
+## GET requests
+
+For GET requests, parameters are interpolated into the URL:
+
+```yaml
+toolsets:
+  - type: api
+    api_config:
+      name: search_users
+      method: GET
+      endpoint: "https://api.example.com/users?q=${query}&limit=${limit}"
+      instruction: Search for users by name
+      args:
+        query:
+          type: string
+          description: Search query
+        limit:
+          type: integer
+          description: Maximum results
+      required: [query]
+```
+
+## POST requests
+
+For POST requests, parameters are sent as JSON in the request body:
+
+```yaml
+toolsets:
+  - type: api
+    api_config:
+      name: create_issue
+      method: POST
+      endpoint: "https://api.example.com/issues"
+      instruction: Create a new issue
+      args:
+        title:
+          type: string
+          description: Issue title
+        priority:
+          type: string
+          enum: [low, medium, high]
+          description: Issue priority
+      required: [title]
+      headers:
+        Content-Type: "application/json"
+        Authorization: "Bearer ${env.API_TOKEN}"
+```
+
+## Multiple tools on one agent
+
+Add multiple `api` toolset entries to give the agent access to several endpoints:
+
+```yaml api-tool.yaml
+agents:
+  root:
+    model: google/gemini-2.5-pro
+    description: Chess.com daily puzzle agent
+    instruction: |
+      Call the daily-puzzle tool and print the puzzle.
+      Do not solve it — only provide hints.
+    toolsets:
+      - type: api
+        api_config:
+          name: daily-puzzle
+          method: GET
+          endpoint: https://api.chess.com/pub/puzzle
+          instruction: Get today's chess puzzle
+          output_schema:
+            type: object
+            properties:
+              title:
+                type: string
+              url:
+                type: string
+              fen:
+                type: string
+                description: Board state in FEN notation
+```
+
+## Limitations
+
+- Only `GET` and `POST` are supported.
+- Response body is limited to 1 MB.
+- Request timeout is 30 seconds.
+- Only `http://` and `https://` URLs are supported.
+- File uploads and multipart forms are not supported.
+
+<Warning>
+  API keys and tokens in headers are visible in debug logs. Always use `${env.VAR}` to reference secrets from the environment rather than hardcoding them in configuration files.
+</Warning>
+
+<Tip>
+  For APIs that need OAuth flows, pagination, or complex request handling, use an MCP server instead. See [MCP toolsets](/concepts/tools#mcp-toolsets) for details.
+</Tip>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Fetch" icon="globe" href="/tools/fetch">
+    Make arbitrary HTTP requests at runtime.
+  </Card>
+  <Card title="Script" icon="scroll" href="/tools/script">
+    Run shell scripts as named tools.
+  </Card>
+  <Card title="Tools overview" icon="hammer" href="/concepts/tools">
+    Compare all built-in toolsets.
+  </Card>
+  <Card title="Configuration" icon="gear" href="/configuration/tools">
+    Full toolset configuration reference.
+  </Card>
+</CardGroup>

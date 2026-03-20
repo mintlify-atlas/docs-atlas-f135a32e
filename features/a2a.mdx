@@ -1,0 +1,62 @@
+---
+title: "A2A Protocol"
+description: "Expose Docker Agent agents via the Agent-to-Agent (A2A) protocol for interoperability with other agent frameworks."
+---
+
+The `docker agent serve a2a` command starts an HTTP server that exposes your agents using the [A2A protocol](https://a2a-protocol.org/latest/). This enables communication between Docker Agent and other agent frameworks that implement A2A.
+
+<Warning>
+  A2A support is functional but still evolving. Tool calls, artifacts, and memory features have limited A2A integration. See the limitations section below.
+</Warning>
+
+## Usage
+
+```bash
+# Start an A2A server
+docker agent serve a2a ./agent.yaml
+
+# Specify a custom address
+docker agent serve a2a ./agent.yaml --listen 127.0.0.1:9000
+
+# Use an agent from the catalog
+docker agent serve a2a agentcatalog/pirate
+```
+
+### Flags
+
+| Flag | Default | Description |
+| ---- | ------- | ----------- |
+| `-a, --agent <name>` | `root` | Name of the agent to run |
+| `-l, --listen <addr>` | `127.0.0.1:8082` | Address to listen on |
+| `--working-dir <path>` | (current dir) | Working directory for the session |
+
+## How it works
+
+When started, the server:
+
+1. Binds to the specified address (or picks an available port if none is given)
+2. Exposes an A2A-compliant agent card with metadata about the agent
+3. Accepts incoming A2A requests and routes them to the Docker Agent runtime
+4. Supports all Docker Agent features — tools, models, model fallbacks — transparently
+
+## Connecting to the server
+
+Any A2A-compatible client can connect to the server's address. The server prints the address on startup:
+
+```bash
+$ docker agent serve a2a ./agent.yaml
+Listening on 127.0.0.1:8082
+```
+
+The agent card is available at the root URL and provides metadata that A2A clients use for discovery.
+
+## Current limitations
+
+- Tool calls are handled internally and are not exposed as separate A2A events
+- A2A artifact support is not yet integrated
+- A2A memory features are not yet integrated
+- Multi-agent (sub-agent) scenarios need further work
+
+<Tip>
+  For exposing agents as MCP tools, see [MCP Mode](/features/mcp-mode). For stdio-based IDE integration, see [ACP](/features/acp). For the HTTP REST API, see [API Server](/features/api-server).
+</Tip>

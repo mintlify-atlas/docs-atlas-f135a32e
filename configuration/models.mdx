@@ -1,0 +1,251 @@
+---
+title: "Model configuration"
+description: "Complete reference for defining models with providers, parameters, and reasoning settings."
+---
+
+Models are defined under the top-level `models` key and referenced by name from agents. You can also reference models inline on an agent using `provider/model-name` format — no `models` section required.
+
+## Model reference formats
+
+<Tabs>
+  <Tab title="Inline">
+    Reference a model directly on the agent using `provider/model-name`:
+
+    ```yaml
+    agents:
+      root:
+        model: openai/gpt-4o
+    ```
+  </Tab>
+  <Tab title="Named">
+    Define the model in the `models` section to set parameters and reuse it:
+
+    ```yaml
+    models:
+      claude:
+        provider: anthropic
+        model: claude-sonnet-4-0
+        max_tokens: 64000
+
+    agents:
+      root:
+        model: claude
+    ```
+  </Tab>
+</Tabs>
+
+## Full schema
+
+```yaml
+models:
+  my_model:
+    provider: string           # required
+    model: string              # required
+    temperature: 0.7           # optional
+    max_tokens: 4096           # optional
+    top_p: 1.0                 # optional
+    frequency_penalty: 0.0     # optional
+    presence_penalty: 0.0      # optional
+    base_url: string           # optional
+    token_key: string          # optional
+    thinking_budget: string|int # optional
+    parallel_tool_calls: true  # optional
+    track_usage: false         # optional
+    routing: []                # optional
+    provider_opts: {}          # optional
+```
+
+## Fields
+
+<ParamField path="provider" type="string" required>
+  The model provider. Supported values: `openai`, `anthropic`, `google`, `amazon-bedrock`, `dmr`, `mistral`, `xai`, `nebius`, `minimax`. Can also be the name of a custom provider defined in the `providers` section.
+</ParamField>
+
+<ParamField path="model" type="string" required>
+  The model identifier as understood by the provider (e.g., `gpt-4o`, `claude-sonnet-4-0`, `gemini-2.5-flash`).
+</ParamField>
+
+<ParamField path="temperature" type="number">
+  Sampling temperature. `0.0` is deterministic, `1.0` is more creative. Range: `0.0`–`1.0`.
+</ParamField>
+
+<ParamField path="max_tokens" type="number">
+  Maximum number of tokens in the model's response. Consult provider documentation for model-specific limits.
+</ParamField>
+
+<ParamField path="top_p" type="number">
+  Nucleus sampling threshold. Only tokens comprising the top `top_p` probability mass are considered. Range: `0.0`–`1.0`.
+</ParamField>
+
+<ParamField path="frequency_penalty" type="number">
+  Penalize tokens that have already appeared in the response, reducing repetition. Range: `0.0`–`2.0`.
+</ParamField>
+
+<ParamField path="presence_penalty" type="number">
+  Encourage the model to introduce new topics by penalizing tokens that have appeared at all. Range: `0.0`–`2.0`.
+</ParamField>
+
+<ParamField path="base_url" type="string">
+  Custom API endpoint URL. Useful for self-hosted models, proxies, or Azure OpenAI deployments.
+</ParamField>
+
+<ParamField path="token_key" type="string">
+  Environment variable name containing the API token. Overrides the provider's default key lookup.
+</ParamField>
+
+<ParamField path="thinking_budget" type="string | number">
+  Reasoning effort control. Accepts a string effort level (`none`, `low`, `medium`, `high`, `adaptive`) or an integer token budget. Provider-specific — see [Thinking budget](#thinking-budget) below.
+</ParamField>
+
+<ParamField path="parallel_tool_calls" type="boolean">
+  Allow the model to call multiple tools simultaneously in a single turn. Supported by most OpenAI and Anthropic models.
+</ParamField>
+
+<ParamField path="track_usage" type="boolean" default="false">
+  Track and report token usage for this model.
+</ParamField>
+
+<ParamField path="routing" type="array">
+  Rule-based routing rules. When set, this model acts as a router that forwards requests to different models based on message content. See [Routing](/configuration/routing).
+</ParamField>
+
+<ParamField path="provider_opts" type="object">
+  Provider-specific options passed directly to the provider. See individual [provider pages](/providers/overview) for available options.
+</ParamField>
+
+## Examples by provider
+
+```yaml
+models:
+  # OpenAI
+  gpt:
+    provider: openai
+    model: gpt-4o
+
+  # Anthropic
+  claude:
+    provider: anthropic
+    model: claude-sonnet-4-0
+    max_tokens: 64000
+
+  # Google Gemini
+  gemini:
+    provider: google
+    model: gemini-2.5-flash
+    temperature: 0.5
+
+  # AWS Bedrock
+  bedrock:
+    provider: amazon-bedrock
+    model: global.anthropic.claude-sonnet-4-5-20250929-v1:0
+    provider_opts:
+      region: us-east-1
+
+  # Docker Model Runner (local)
+  local:
+    provider: dmr
+    model: ai/qwen3
+    max_tokens: 8192
+```
+
+## Thinking budget
+
+Control how much reasoning the model does before responding. Configuration varies by provider.
+
+<AccordionGroup>
+  <Accordion title="OpenAI — effort levels">
+    Uses string effort levels:
+
+    ```yaml
+    models:
+      gpt:
+        provider: openai
+        model: o4-mini
+        thinking_budget: medium  # none | low | medium | high
+    ```
+  </Accordion>
+  <Accordion title="Anthropic — token budget">
+    Uses an integer token budget (1024–32768). Must be less than `max_tokens`:
+
+    ```yaml
+    models:
+      claude:
+        provider: anthropic
+        model: claude-sonnet-4-5
+        max_tokens: 64000
+        thinking_budget: 16384
+    ```
+  </Accordion>
+  <Accordion title="Google Gemini 2.5 — token budget">
+    Uses an integer token budget. `0` disables thinking, `-1` lets the model decide dynamically:
+
+    ```yaml
+    models:
+      gemini:
+        provider: google
+        model: gemini-2.5-flash
+        thinking_budget: -1  # -1 = dynamic (default)
+    ```
+  </Accordion>
+  <Accordion title="Google Gemini 3 — effort levels">
+    Uses string effort levels like OpenAI:
+
+    ```yaml
+    models:
+      gemini3:
+        provider: google
+        model: gemini-3-flash
+        thinking_budget: medium  # none | low | medium | high
+    ```
+  </Accordion>
+</AccordionGroup>
+
+To disable thinking on any provider:
+
+```yaml
+thinking_budget: none  # or 0
+```
+
+## Interleaved thinking
+
+For Anthropic and Bedrock Claude models, interleaved thinking allows tool calls during the model's reasoning process. This is enabled by default.
+
+```yaml
+models:
+  claude:
+    provider: anthropic
+    model: claude-sonnet-4-5
+    provider_opts:
+      interleaved_thinking: false  # disable if needed
+```
+
+## Custom endpoints
+
+Use `base_url` and `token_key` to point to custom or self-hosted endpoints:
+
+```yaml
+models:
+  # Azure OpenAI
+  azure_gpt:
+    provider: openai
+    model: gpt-4o
+    base_url: https://my-resource.openai.azure.com/openai/deployments/gpt-4o
+    token_key: AZURE_OPENAI_API_KEY
+
+  # Self-hosted vLLM (OpenAI-compatible)
+  local_llama:
+    provider: openai
+    model: meta-llama/Llama-3.2-3B-Instruct
+    base_url: http://localhost:8000/v1
+
+  # Internal proxy
+  proxied:
+    provider: openai
+    model: gpt-4o
+    base_url: https://proxy.internal.company.com/openai/v1
+    token_key: INTERNAL_API_KEY
+```
+
+For reusable provider configurations, use the top-level `providers` section instead of repeating `base_url` and `token_key` on every model. See [Configuration overview](/configuration/overview#custom-providers-section).
+
+See [Local models](/providers/local) and [Custom providers](/providers/custom) for more details.

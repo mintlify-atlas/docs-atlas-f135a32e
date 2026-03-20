@@ -1,0 +1,83 @@
+---
+title: "Fetch"
+description: "Make HTTP requests to external APIs and web pages."
+---
+
+The fetch tool lets agents make HTTP requests to external URLs. The agent can read web pages, call REST APIs, download data, and interact with web services — with support for multiple URLs in a single call.
+
+## Configuration
+
+```yaml
+toolsets:
+  - type: fetch
+```
+
+### Options
+
+<ParamField path="timeout" type="integer" default="30">
+  Default request timeout in seconds. Can be overridden per-call by the agent.
+</ParamField>
+
+### Custom timeout
+
+```yaml
+toolsets:
+  - type: fetch
+    timeout: 60
+```
+
+## Fetch tool parameters
+
+When the agent calls the `fetch` tool, it passes these parameters:
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `urls` | string[] | Yes | One or more URLs to fetch. Multiple URLs are fetched and returned together. |
+| `timeout` | integer | No | Per-call timeout in seconds. Overrides the toolset default. |
+| `format` | string | No | Response format: `markdown` (default for HTML) or `text`. |
+
+HTML responses are automatically converted to Markdown for easier reading by the model.
+
+## Example agent
+
+```yaml fetch_docker.yaml
+agents:
+  root:
+    model: anthropic/claude-3-7-sonnet-latest
+    description: Web content analyzer
+    instruction: |
+      You are a web content analyzer that fetches web pages and provides
+      concise summaries. When asked to summarize a website:
+      1. Use the fetch tool to retrieve the content.
+      2. Analyze the content and extract key information.
+      3. Provide a clear, structured summary.
+    toolsets:
+      - type: fetch
+```
+
+<Tip>
+  **Fetch vs. API tool**: The fetch tool gives the agent full control over HTTP requests at runtime. The [API tool](/tools/api) lets you predefine specific API calls as named tools with typed parameters. Use `fetch` for general-purpose HTTP access; use `api` for well-known endpoints you want to expose as structured tools.
+</Tip>
+
+## Security considerations
+
+<Warning>
+  The fetch tool makes outbound network requests to any URL the agent chooses. If your agent should only access specific URLs, use the [API tool](/tools/api) or an [MCP server](/concepts/tools#mcp-toolsets) that restricts the allowed endpoints.
+</Warning>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="API" icon="plug" href="/tools/api">
+    Expose specific HTTP endpoints as structured tools.
+  </Card>
+  <Card title="Script" icon="scroll" href="/tools/script">
+    Run curl commands as predefined shell scripts.
+  </Card>
+  <Card title="Shell" icon="terminal" href="/tools/shell">
+    Execute arbitrary commands including curl and wget.
+  </Card>
+  <Card title="Tools overview" icon="hammer" href="/concepts/tools">
+    Compare all built-in toolsets.
+  </Card>
+</CardGroup>

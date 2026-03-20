@@ -1,0 +1,132 @@
+---
+title: "Script"
+description: "Define custom shell scripts as named tools with typed parameters."
+---
+
+The script tool lets you define custom shell scripts as named tools. Unlike the generic [shell tool](/tools/shell) where the agent writes the command at runtime, script tools execute predefined commands with descriptive names and typed parameters — ideal for exposing safe, well-scoped operations to the agent.
+
+## Configuration
+
+### Simple scripts
+
+Define scripts with a name, command, and description:
+
+```yaml
+toolsets:
+  - type: script
+    shell:
+      run_tests:
+        cmd: task test
+        description: Run the project test suite
+      lint:
+        cmd: task lint
+        description: Run the linter
+      build:
+        cmd: task build
+        description: Build the application binary
+```
+
+### Scripts with parameters
+
+Use `${param}` interpolation and JSON Schema to define typed arguments:
+
+```yaml
+toolsets:
+  - type: script
+    shell:
+      deploy:
+        cmd: ./scripts/deploy.sh ${env}
+        description: Deploy the application to an environment
+        args:
+          env:
+            type: string
+            enum: [staging, production]
+            description: Target environment
+        required: [env]
+```
+
+## Script properties
+
+<ParamField path="shell.<name>.cmd" type="string" required>
+  Shell command to execute. Use `${arg_name}` to interpolate parameter values.
+</ParamField>
+
+<ParamField path="shell.<name>.description" type="string">
+  Human-readable description shown to the model. A clear description helps the agent choose the right tool.
+</ParamField>
+
+<ParamField path="shell.<name>.args" type="object">
+  Parameter definitions as JSON Schema properties. Each key is a parameter name.
+</ParamField>
+
+<ParamField path="shell.<name>.required" type="array">
+  List of required parameter names. Parameters not in this list are optional.
+</ParamField>
+
+<ParamField path="shell.<name>.env" type="object">
+  Environment variables specific to this script. Values can reference `${env.VAR}` for host environment variables.
+</ParamField>
+
+<ParamField path="shell.<name>.working_dir" type="string">
+  Working directory for this script. Defaults to the agent's working directory.
+</ParamField>
+
+## Example agent
+
+```yaml script_shell.yaml
+agents:
+  root:
+    model: openai/gpt-4o
+    description: Assistant with custom shell tools
+    instruction: You are a helpful assistant with access to custom tools.
+    toolsets:
+      - type: script
+        shell:
+          get_ip:
+            cmd: "curl -s https://ipinfo.io | jq -r .ip"
+            description: Get the public IP address
+
+          docker_images:
+            cmd: "docker images ${img}"
+            description: List Docker images, optionally filtered by name
+            args:
+              img:
+                type: string
+                description: Optional image name filter
+
+          github_user_repos:
+            cmd: "curl -s https://api.github.com/users/${username}/repos | jq '.[].name'"
+            description: List GitHub repositories for a user
+            required: [username]
+            args:
+              username:
+                type: string
+                description: GitHub username
+```
+
+<Tip>
+  **Script vs. Shell**: Use the [shell tool](/tools/shell) when the agent needs to run arbitrary commands at runtime. Use the script tool when you want to expose specific, predefined operations with clear names — giving the agent less freedom but more safety and predictability.
+</Tip>
+
+## Security considerations
+
+<Warning>
+  Script commands run in a shell and are subject to the same security considerations as the shell tool. Avoid interpolating untrusted user input directly into commands. Use typed parameters with `enum` constraints when the set of valid values is known.
+</Warning>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Shell" icon="terminal" href="/tools/shell">
+    Run arbitrary commands at runtime.
+  </Card>
+  <Card title="API" icon="plug" href="/tools/api">
+    Define HTTP API calls as named tools.
+  </Card>
+  <Card title="Permissions" icon="shield" href="/configuration/permissions">
+    Control which tools require confirmation.
+  </Card>
+  <Card title="Configuration" icon="gear" href="/configuration/tools">
+    Full toolset configuration reference.
+  </Card>
+</CardGroup>

@@ -1,0 +1,356 @@
+---
+title: "Tips & best practices"
+description: "Expert guidance for building effective, efficient, and secure agents."
+---
+
+## Configuration tips
+
+### Auto mode for quick start
+
+You don't need a config file to start. Run `docker agent run` with no arguments and docker-agent automatically selects the best available provider based on which API keys are set:
+
+```bash
+# Uses best available provider automatically
+docker agent run
+```
+
+Provider priority: OpenAI → Anthropic → Google → Mistral → DMR.
+
+The `auto` value also works inside config files:
+
+```yaml
+agents:
+  root:
+    model: auto
+    description: Adaptive assistant
+    instruction: You are a helpful assistant.
+```
+
+### Set a personal default model
+
+Add a default model to `~/.config/cagent/config.yaml` so you don't have to specify it every time:
+
+```yaml
+settings:
+  default_model: anthropic/claude-sonnet-4-0
+```
+
+### Model aliases are pinned automatically
+
+docker-agent resolves model aliases to their latest stable version. This keeps behavior reproducible without you having to track version strings manually:
+
+```yaml
+# You write:
+model: anthropic/claude-sonnet-4-5
+
+# docker-agent resolves to the latest available pinned version
+```
+
+To lock to a specific version, write it explicitly.
+
+## Performance tips
+
+### Defer tools for faster startup
+
+Large MCP toolsets can slow down agent startup because docker-agent must connect to each server and enumerate available tools. Use `defer: true` to load tools only when they are first used:
+
+```yaml
+agents:
+  root:
+    model: openai/gpt-4o
+    description: Multi-tool assistant
+    instruction: You have many tools available.
+    toolsets:
+      - type: mcp
+        ref: docker:github-official
+        defer: true
+      - type: mcp
+        ref: docker:slack
+        defer: true
+```
+
+You can also defer individual tools within a toolset:
+
+```yaml
+toolsets:
+  - type: mcp
+    ref: docker:github-official
+    defer:
+      - list_issues
+      - search_repos
+```
+
+### Filter MCP tools
+
+Many MCP servers expose dozens of tools. Limit the exposed set to only what the agent needs — fewer tools means faster tool selection and less token usage in the system prompt:
+
+```yaml
+toolsets:
+  - type: mcp
+    ref: docker:github-official
+    tools:
+      - list_issues
+      - create_issue
+      - get_pull_request
+      - create_pull_request
+```
+
+### Set max_iterations
+
+Always set `max_iterations` on agents that have access to powerful or destructive tools. This prevents runaway loops and gives you a predictable cost ceiling:
+
+```yaml
+agents:
+  developer:
+    model: anthropic/claude-sonnet-4-0
+    description: Development assistant
+    instruction: You are a developer.
+    max_iterations: 30
+    toolsets:
+      - type: filesystem
+      - type: shell
+```
+
+Typical values: 20–30 for development agents, 10–15 for simple tasks.
+
+## Reliability tips
+
+### Use fallback models
+
+Configure fallback models to keep agents running during provider outages or rate limit events:
+
+```yaml
+agents:
+  root:
+    model: anthropic/claude-sonnet-4-0
+    description: Reliable assistant
+    instruction: You are a helpful assistant.
+    fallback:
+      models:
+        - openai/gpt-4o       # Different provider for resilience
+        - openai/gpt-4o-mini  # Cheaper model as last resort
+      retries: 2    # Retry 5xx errors before falling back
+      cooldown: 1m  # Stay on fallback for 1 minute after rate limit
+```
+
+Best practices for fallback chains:
+- Use different providers for true redundancy
+- Order by preference, best first
+- Include a cheaper or faster model as a last resort
+
+### Use the think tool for complex tasks
+
+The `think` tool gives the agent an internal reasoning scratchpad. It adds minimal overhead but significantly improves output quality for multi-step tasks:
+
+```yaml
+toolsets:
+  - type: think
+```
+
+## Security tips
+
+### Understand --yolo mode
+
+The `--yolo` flag auto-approves all tool calls without asking for confirmation:
+
+```bash
+# Useful in CI or with read-only tools
+docker agent run agent.yaml --yolo
+```
+
+<Warning>
+  Avoid `--yolo` in interactive sessions when the agent has shell or filesystem write access and you haven't reviewed the agent's instructions carefully. It is safest in CI/CD pipelines or with agents that only call read-only tools.
+</Warning>
+
+Selective tool approval is the safer default for interactive use:
+- **Approve once** — allow this specific call
+- **Always allow** — approve this tool pattern for the rest of the session
+- **Deny** — reject the call
+
+### Combine permissions with sandbox
+
+For defense in depth, restrict what tools can do at the permission level and isolate the agent in a container with sandbox mode:
+
+```yaml
+agents:
+  secure_dev:
+    model: anthropic/claude-sonnet-4-0
+    description: Secure development assistant
+    instruction: You are a secure coding assistant.
+    toolsets:
+      - type: filesystem
+      - type: shell
+
+permissions:
+  allow:
+    - "read_*"
+    - "shell:cmd=go*"
+    - "shell:cmd=npm*"
+  deny:
+    - "shell:cmd=sudo*"
+    - "shell:cmd=rm*-rf*"
+```
+
+```bash
+docker agent run --sandbox agent.yaml
+```
+
+### Use hooks for audit logging
+
+Log every tool call to an external system for compliance or debugging:
+
+```yaml
+agents:
+  audited:
+    model: openai/gpt-4o
+    description: Audited assistant
+    instruction: You are a helpful assistant.
+    hooks:
+      post_tool_use:
+        - matcher: "*"
+          hooks:
+            - type: command
+              command: "./scripts/audit-log.sh"
+```
+
+## Multi-agent tips
+
+### sub_agents vs handoffs
+
+Choose the right delegation model for your use case:
+
+<CardGroup cols={2}>
+  <Card title="sub_agents (transfer_task)" icon="sitemap">
+    Delegates a task to a child agent, waits for the result, then the parent continues. Use when the root agent needs to coordinate and synthesize results.
+
+    ```yaml
+    sub_agents: [researcher, writer]
+    ```
+  </Card>
+  <Card title="handoffs (A2A)" icon="arrow-right">
+    Transfers control entirely to another agent — possibly remote. The handoff is one-way and the original agent is no longer involved.
+
+    ```yaml
+    handoffs:
+      - specialist
+      - namespace/remote-agent
+    ```
+  </Card>
+</CardGroup>
+
+### Give sub-agents clear descriptions
+
+The root agent reads sub-agent `description` fields to decide which one to delegate to. Vague descriptions lead to poor routing:
+
+```yaml
+agents:
+  root:
+    model: anthropic/claude-sonnet-4-0
+    description: Technical lead
+    instruction: Delegate to specialists based on the task.
+    sub_agents: [frontend, backend, devops]
+
+  frontend:
+    model: openai/gpt-4o
+    description: |
+      Frontend specialist. Handles React, TypeScript, CSS,
+      UI components, and browser-related issues.
+
+  backend:
+    model: openai/gpt-4o
+    description: |
+      Backend specialist. Handles APIs, databases,
+      server logic, and Go/Python code.
+
+  devops:
+    model: openai/gpt-4o
+    description: |
+      DevOps specialist. Handles CI/CD, Docker, Kubernetes,
+      infrastructure, and deployment pipelines.
+```
+
+## Debugging tips
+
+### Enable debug logging
+
+The `--debug` flag writes a detailed log of all API calls, tool executions, and internal events:
+
+```bash
+# Logs to ~/.cagent/cagent.debug.log by default
+docker agent run agent.yaml --debug
+
+# Write to a custom location
+docker agent run agent.yaml --debug --log-file ./debug.log
+```
+
+<Tip>
+  Always attach the debug log when filing a bug report.
+</Tip>
+
+### Check token usage
+
+Run `/cost` inside a session to see input and output token counts and estimated cost:
+
+```text
+/cost
+
+Token Usage:
+  Input:  12,456 tokens
+  Output:  3,789 tokens
+  Total:  16,245 tokens
+```
+
+### Compact long sessions
+
+If a session grows too large for the context window, use `/compact` to generate a summary and trim history:
+
+```text
+/compact
+
+Session compacted. Summary generated and history trimmed.
+```
+
+You can also set `num_history_items` in your agent config to cap how many messages are sent to the model per turn.
+
+## Automation example
+
+Use docker-agent as an automated PR reviewer in GitHub Actions:
+
+```yaml
+# .github/workflows/pr-review.yml
+name: PR Review
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run docker-agent review
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          curl -fsSL https://get.docker-agent.dev | sh
+          docker agent run --exec reviewer.yaml --yolo \
+            "Review PR #${{ github.event.pull_request.number }}"
+```
+
+With a minimal reviewer agent config:
+
+```yaml
+# reviewer.yaml
+agents:
+  root:
+    model: anthropic/claude-sonnet-4-0
+    description: PR reviewer
+    instruction: |
+      Review pull requests for code quality, bugs, and security issues.
+      Be constructive and specific in your feedback.
+    toolsets:
+      - type: mcp
+        ref: docker:github-official
+      - type: think
+```

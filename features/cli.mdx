@@ -1,0 +1,270 @@
+---
+title: "CLI Reference"
+description: "Complete reference for all Docker Agent command-line commands and flags."
+---
+
+<Tip>
+  Running `docker agent run` without a config file uses a built-in default agent. Perfect for quick experimentation.
+</Tip>
+
+## `docker agent run`
+
+Launch the interactive TUI with an agent configuration.
+
+```bash
+docker agent run [<agent-file>|<registry-ref>] [message...] [flags]
+```
+
+| Flag | Description |
+| ---- | ----------- |
+| `-a, --agent <name>` | Run a specific agent from the config (default: `root`) |
+| `--yolo` | Auto-approve all tool calls |
+| `--model <ref>` | Override model(s). Use `provider/model` for all agents, or `agent=provider/model` for a specific agent. Comma-separate multiple overrides. |
+| `--session <id>` | Resume a previous session by ID or relative offset (`-1` = last, `-2` = second to last) |
+| `-s, --session-db <path>` | Path to the SQLite session database (default: `~/.cagent/session.db`) |
+| `--prompt-file <path>` | Append file contents to the prompt (repeatable) |
+| `--attach <path>` | Attach an image file to the message |
+| `--hook-pre-tool-use <cmd>` | Add a pre-tool-use hook command (repeatable) |
+| `--hook-post-tool-use <cmd>` | Add a post-tool-use hook command (repeatable) |
+| `--hook-session-start <cmd>` | Add a session-start hook command (repeatable) |
+| `--hook-session-end <cmd>` | Add a session-end hook command (repeatable) |
+| `--hook-on-user-input <cmd>` | Add an on-user-input hook command (repeatable) |
+| `--hide-tool-results` | Hide tool call results |
+| `--working-dir <path>` | Set the working directory for the session |
+| `--sandbox` | Run the agent inside a Docker sandbox |
+| `--template <image>` | Template image for the sandbox |
+| `--dry-run` | Initialize the agent without executing anything |
+| `--remote <address>` | Use remote runtime at the specified address |
+| `--record [<path>]` | Record AI API interactions to a cassette file |
+| `--fake <path>` | Replay AI responses from a cassette file (for testing) |
+| `--env-from-file <path>` | Set environment variables from a file |
+| `--models-gateway <url>` | Set the models gateway address |
+| `-d, --debug` | Enable debug logging |
+| `--log-file <path>` | Custom debug log location |
+| `-o, --otel` | Enable OpenTelemetry tracing |
+
+```bash
+# Examples
+docker agent run agent.yaml
+docker agent run agent.yaml "Fix the bug in auth.go"
+docker agent run agent.yaml -a developer --yolo
+docker agent run agent.yaml --model anthropic/claude-sonnet-4-0
+docker agent run agent.yaml --model "dev=openai/gpt-4o,reviewer=anthropic/claude-sonnet-4-0"
+docker agent run agent.yaml --session -1
+docker agent run agent.yaml --prompt-file ./context.md
+
+# Queue multiple messages (processed in sequence)
+docker agent run agent.yaml "question 1" "question 2" "question 3"
+
+# Add hooks from the command line
+docker agent run agent.yaml --hook-session-start "./scripts/setup-env.sh"
+docker agent run agent.yaml --hook-pre-tool-use "./scripts/validate.sh"
+```
+
+## `docker agent run --exec`
+
+Run an agent in non-interactive (headless) mode. Output goes to stdout instead of the TUI.
+
+| Flag | Description |
+| ---- | ----------- |
+| `--exec` | Execute without a TUI |
+| `--hide-tool-calls` | Hide tool calls in the output |
+| `--json` | Output results in JSON format |
+
+All `run` flags also apply.
+
+```bash
+# One-shot task
+docker agent run --exec agent.yaml "Create a Dockerfile for a Python Flask app"
+
+# With auto-approve
+docker agent run --exec agent.yaml --yolo "Set up CI/CD pipeline"
+
+# Multi-turn conversation
+docker agent run --exec agent.yaml "question 1" "question 2"
+
+# Read prompt from stdin
+echo "INSTRUCTIONS" | docker agent run --exec agent.yaml -
+```
+
+## `docker agent new`
+
+Interactively generate a new agent configuration file.
+
+```bash
+docker agent new [description] [flags]
+```
+
+| Flag | Description |
+| ---- | ----------- |
+| `--model <ref>` | Model to use (format: `provider/model`) |
+| `--max-iterations <n>` | Maximum number of agentic loop iterations |
+
+```bash
+docker agent new
+docker agent new "a web scraper that extracts product prices"
+docker agent new --model openai/gpt-4o "a code reviewer agent"
+```
+
+## `docker agent serve`
+
+Start an agent as a server. See the sub-commands below.
+
+### `docker agent serve api`
+
+Start the HTTP API server for programmatic access.
+
+```bash
+docker agent serve api <agent-file>|<agents-dir> [flags]
+```
+
+| Flag | Description |
+| ---- | ----------- |
+| `-l, --listen <addr>` | Address to listen on (default: `127.0.0.1:8080`) |
+| `-s, --session-db <path>` | Path to the session database (default: `session.db`) |
+| `--pull-interval <mins>` | Auto-pull OCI reference every N minutes (0 = disabled) |
+
+See [API Server](/features/api-server) for endpoint details.
+
+### `docker agent serve mcp`
+
+Expose agents as MCP tools.
+
+```bash
+docker agent serve mcp <agent-file>|<registry-ref> [flags]
+```
+
+| Flag | Description |
+| ---- | ----------- |
+| `-a, --agent <name>` | Name of the agent to expose (all agents if not specified) |
+| `--http` | Use streaming HTTP transport instead of stdio |
+| `-l, --listen <addr>` | Address to listen on when using `--http` (default: `127.0.0.1:8081`) |
+| `--working-dir <path>` | Set the working directory |
+
+See [MCP Mode](/features/mcp-mode) for client setup.
+
+### `docker agent serve a2a`
+
+Start an A2A (Agent-to-Agent) protocol server.
+
+```bash
+docker agent serve a2a <agent-file>|<registry-ref> [flags]
+```
+
+| Flag | Description |
+| ---- | ----------- |
+| `-a, --agent <name>` | Name of the agent to run (default: `root`) |
+| `-l, --listen <addr>` | Address to listen on (default: `127.0.0.1:8082`) |
+
+See [A2A Protocol](/features/a2a) for details.
+
+### `docker agent serve acp`
+
+Start an ACP (Agent Client Protocol) server over stdio.
+
+```bash
+docker agent serve acp <agent-file>|<registry-ref> [flags]
+```
+
+| Flag | Description |
+| ---- | ----------- |
+| `-s, --session-db <path>` | Path to the SQLite session database (default: `~/.cagent/session.db`) |
+
+See [ACP](/features/acp) for details.
+
+## `docker agent eval`
+
+Run agent evaluations.
+
+```bash
+docker agent eval <agent-file>|<registry-ref> [<eval-dir>] [flags]
+```
+
+The `eval-dir` defaults to `./evals`.
+
+| Flag | Description |
+| ---- | ----------- |
+| `-c, --concurrency <n>` | Number of concurrent evaluation runs (default: number of CPUs) |
+| `--judge-model <ref>` | Model to use for relevance checking (default: `anthropic/claude-opus-4-5-20251101`) |
+| `--output <dir>` | Directory for results and logs (default: `<eval-dir>/results`) |
+| `--only <pattern>` | Only run evaluations whose filenames match this pattern (repeatable) |
+| `--base-image <image>` | Custom base Docker image for running evaluations |
+| `--keep-containers` | Keep containers after evaluation (skip `--rm`) |
+| `-e, --env <KEY[=VALUE]>` | Environment variables to pass to containers (repeatable) |
+
+```bash
+docker agent eval agent.yaml
+docker agent eval agent.yaml ./evals -c 8
+docker agent eval agent.yaml --only "auth*"
+docker agent eval agent.yaml --keep-containers
+```
+
+See [Evaluation](/features/evaluation) for how to write eval files.
+
+## `docker agent share`
+
+Share agents via OCI registries.
+
+```bash
+# Push an agent
+docker agent share push ./agent.yaml docker.io/username/my-agent:latest
+
+# Pull an agent
+docker agent share pull docker.io/username/my-agent:latest
+```
+
+## `docker agent alias`
+
+Manage agent aliases for quick access.
+
+```bash
+# List aliases
+docker agent alias ls
+
+# Add an alias
+docker agent alias add pirate /path/to/pirate.yaml
+docker agent alias add yolo-coder agentcatalog/coder --yolo
+docker agent alias add fast-coder agentcatalog/coder --model openai/gpt-4o-mini
+
+# Use an alias
+docker agent run pirate
+```
+
+Alias options (`--yolo`, `--model`) apply automatically when the alias is used. Command-line flags override alias options.
+
+<Tip>
+  Create a `default` alias to customize what `docker agent` launches with no arguments:
+
+  ```bash
+  docker agent alias add default /my/default/agent.yaml
+  ```
+</Tip>
+
+## `docker agent version`
+
+Print version and commit hash.
+
+```bash
+docker agent version
+```
+
+## Global flags
+
+| Flag | Description |
+| ---- | ----------- |
+| `-d, --debug` | Enable debug logging (default output: `~/.cagent/cagent.debug.log`) |
+| `--log-file <path>` | Custom debug log location |
+| `-o, --otel` | Enable OpenTelemetry tracing |
+| `--help` | Show help for any command |
+
+## Agent references
+
+Commands that accept a config file support multiple reference types:
+
+| Type | Example |
+| ---- | ------- |
+| Local file | `./agent.yaml` |
+| OCI registry | `docker.io/username/agent:latest` |
+| Agent catalog | `agentcatalog/pirate` |
+| Alias | `pirate` (after `docker agent alias add`) |
+| Default | (no argument) — uses built-in default agent |

@@ -1,0 +1,125 @@
+---
+title: "Shell"
+description: "Execute shell commands in the user's environment."
+---
+
+The shell tool allows agents to execute arbitrary shell commands. It is one of the most powerful built-in tools — it lets agents run builds, install dependencies, query the system, and automate any task expressible as a shell command.
+
+Each call runs in a fresh, isolated shell session. No state (environment variables, working directory changes) persists between separate `shell` calls.
+
+## Available tools
+
+| Tool | Description |
+| --- | --- |
+| `shell` | Execute a shell command and return its combined stdout/stderr output. |
+| `run_background_job` | Start a long-running command in the background and return a job ID immediately. |
+| `list_background_jobs` | List all background jobs with their status and runtime. |
+| `view_background_job` | View the live output or final result of a background job by ID. |
+| `stop_background_job` | Cancel a running background job by ID. |
+
+## Configuration
+
+```yaml
+toolsets:
+  - type: shell
+```
+
+### Options
+
+<ParamField path="env" type="object">
+  Environment variables to inject into every shell command. Values can reference existing environment variables using `${VAR}` syntax.
+</ParamField>
+
+### Custom environment variables
+
+```yaml
+toolsets:
+  - type: shell
+    env:
+      NODE_ENV: production
+      PATH: "${PATH}:/home/user/.local/bin"
+      API_BASE_URL: "https://api.example.com"
+```
+
+## Shell tool parameters
+
+When the agent calls the `shell` tool, it passes these parameters:
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `cmd` | string | Yes | The shell command to execute. |
+| `cwd` | string | No | Working directory for this command. Defaults to the agent's working directory. |
+| `timeout` | integer | No | Per-call timeout in seconds. Overrides the default 30-second timeout. |
+
+## Background jobs
+
+Use `run_background_job` for long-running processes like dev servers, file watchers, or build daemons. The agent can start the job and continue with other tasks while it runs.
+
+```yaml agent.yaml
+agents:
+  root:
+    model: openai/gpt-4o
+    description: Full-stack developer
+    instruction: |
+      You can start dev servers in the background while working on code.
+      Use run_background_job for servers and watchers.
+    toolsets:
+      - type: shell
+      - type: filesystem
+```
+
+All background jobs are automatically terminated when the agent stops. Output per job is capped at 10 MB.
+
+## Example agent
+
+```yaml agent.yaml
+agents:
+  root:
+    model: openai/gpt-4o
+    description: Build and test assistant
+    instruction: |
+      Help the user run builds, tests, and linting.
+      Use the shell tool to execute commands.
+      Use cwd to run commands in the right directory.
+    toolsets:
+      - type: shell
+        env:
+          GOFLAGS: "-mod=mod"
+      - type: filesystem
+```
+
+<Note>
+  By default, Docker Agent asks for confirmation before executing shell commands. Use `--yolo` to auto-approve all tool calls without prompts — useful for automated workflows:
+
+  ```bash
+  docker agent run agent.yaml --yolo
+  ```
+</Note>
+
+## Security considerations
+
+<Warning>
+  The shell tool gives the agent full access to the system shell. Apply these safeguards:
+
+  - Set `max_iterations` on the agent (20–50 is typical) to prevent runaway loops.
+  - Use [Sandbox Mode](/configuration/sandbox) to run the agent in an isolated container.
+  - Use [Permissions](/configuration/permissions) to require confirmation before destructive commands.
+  - Use the `env` option to inject credentials rather than having the agent read them from files.
+</Warning>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Script" icon="scroll" href="/tools/script">
+    Expose predefined commands as named tools with typed parameters.
+  </Card>
+  <Card title="Filesystem" icon="folder" href="/tools/filesystem">
+    Read and write files alongside shell operations.
+  </Card>
+  <Card title="Sandbox" icon="box" href="/configuration/sandbox">
+    Run agents in isolated Docker containers.
+  </Card>
+  <Card title="Permissions" icon="shield" href="/configuration/permissions">
+    Control which commands require confirmation.
+  </Card>
+</CardGroup>

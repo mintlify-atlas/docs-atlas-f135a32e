@@ -1,0 +1,81 @@
+---
+title: "Nebius"
+description: "Use Nebius AI models with docker-agent."
+---
+
+Nebius provides AI models — including popular open models such as DeepSeek, Qwen, and Llama — through an OpenAI-compatible API. docker-agent includes built-in support for Nebius as an alias provider.
+
+## Setup
+
+1. Get an API key from [nebius.ai](https://nebius.ai/).
+2. Set the environment variable:
+
+```bash
+export NEBIUS_API_KEY="your-api-key"
+```
+
+## Configuration
+
+<Tabs>
+  <Tab title="Inline">
+    ```yaml
+    agents:
+      root:
+        model: nebius/deepseek-ai/DeepSeek-V3
+        description: Assistant using Nebius
+        instruction: You are a helpful assistant.
+    ```
+  </Tab>
+  <Tab title="Named model">
+    ```yaml
+    models:
+      nebius_model:
+        provider: nebius
+        model: deepseek-ai/DeepSeek-V3
+        temperature: 0.7
+        max_tokens: 8192
+
+    agents:
+      root:
+        model: nebius_model
+        description: Assistant using Nebius
+        instruction: You are a helpful assistant.
+    ```
+  </Tab>
+</Tabs>
+
+## Available models
+
+Nebius hosts a variety of open models. Check the [Nebius documentation](https://nebius.ai/docs) for the current catalog.
+
+| Model | Description |
+| --- | --- |
+| `deepseek-ai/DeepSeek-V3` | DeepSeek V3 |
+| `moonshotai/Kimi-K2-Instruct` | Kimi K2 instruction-tuned |
+| `Qwen/Qwen2.5-72B-Instruct` | Qwen 2.5 72B instruction-tuned |
+| `meta-llama/Llama-3.3-70B-Instruct` | Llama 3.3 70B instruction-tuned |
+
+## How it works
+
+Nebius is a built-in alias provider:
+
+- **API type:** `openai_chatcompletions`
+- **Base URL:** `https://api.studio.nebius.ai/v1`
+- **Token variable:** `NEBIUS_API_KEY`
+
+## Example: code assistant
+
+```yaml
+agents:
+  coder:
+    model: nebius/deepseek-ai/DeepSeek-V3
+    description: Code assistant using DeepSeek
+    instruction: |
+      You are an expert programmer using DeepSeek V3.
+      Write clean, well-documented code.
+      Follow best practices for the language being used.
+    toolsets:
+      - type: filesystem
+      - type: shell
+      - type: think
+```

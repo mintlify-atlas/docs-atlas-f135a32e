@@ -1,0 +1,172 @@
+---
+title: "Quickstart"
+description: "Get up and running with docker-agent in under 5 minutes."
+---
+
+This guide walks you through the fastest paths to a working agent. Pick whichever option suits you best.
+
+## Option A: Run the default agent
+
+The fastest way to try docker-agent — no config file needed:
+
+```bash
+docker agent run
+```
+
+This launches a general-purpose assistant with sensible defaults using the interactive TUI. Just start chatting.
+
+## Option B: Run a pre-built agent from the catalog
+
+Pull and run a ready-made agent from the [agent catalog](https://hub.docker.com/u/agentcatalog) — no YAML required:
+
+```bash
+# Run a pirate-themed assistant
+docker agent run agentcatalog/pirate
+
+# Run a coding agent
+docker agent run agentcatalog/coder
+```
+
+## Option C: Write your own agent config
+
+<Steps>
+  <Step title="Create an agent.yaml">
+    Create a file named `agent.yaml` in your working directory:
+
+    ```yaml agent.yaml
+    agents:
+      root:
+        model: openai/gpt-5-mini
+        description: A helpful AI assistant
+        instruction: |
+          You are a knowledgeable assistant that helps users with various tasks.
+          Be helpful, accurate, and concise in your responses.
+    ```
+
+    This is the minimal structure every agent config requires:
+
+    - `agents.root` — the entry-point agent (the name `root` is the default)
+    - `model` — the AI model in `provider/model-name` format
+    - `description` — a short summary of what the agent does
+    - `instruction` — the system prompt that shapes the agent's behavior
+  </Step>
+
+  <Step title="Add tools (optional)">
+    Give your agent capabilities by adding toolsets. Here is an agent with filesystem access, shell execution, and step-by-step reasoning:
+
+    ```yaml agent.yaml
+    agents:
+      root:
+        model: anthropic/claude-sonnet-4-0
+        description: A helpful coding assistant
+        instruction: |
+          You are an expert software developer. Help users write
+          clean, efficient code. Explain your reasoning.
+        toolsets:
+          - type: filesystem
+          - type: shell
+          - type: think
+    ```
+  </Step>
+
+  <Step title="Run the agent">
+    Launch the interactive TUI:
+
+    ```bash
+    docker agent run agent.yaml
+    ```
+
+    Once the agent is running, try asking it to:
+
+    - _"List the files in the current directory"_
+    - _"Create a Python script that fetches weather data"_
+    - _"Explain what the code in main.go does"_
+
+    <Tip>
+      Add `--yolo` to auto-approve all tool calls without being prompted:
+
+      ```bash
+      docker agent run agent.yaml --yolo
+      ```
+    </Tip>
+  </Step>
+</Steps>
+
+## Option D: Generate a config interactively
+
+Use `docker agent new` to scaffold a config file through prompts:
+
+```bash
+# Interactive wizard
+docker agent new
+
+# Specify a model directly
+docker agent new --model openai/gpt-4o
+```
+
+This generates an `agent.yaml` in the current directory. Run it with:
+
+```bash
+docker agent run agent.yaml
+```
+
+## Non-interactive mode
+
+Use `--exec` to run an agent without the TUI — useful for scripts and one-shot tasks:
+
+```bash
+# Pass a prompt directly
+docker agent run --exec agent.yaml "Create a Dockerfile for a Node.js app"
+
+# Pipe input from stdin
+cat error.log | docker agent run --exec agent.yaml "What's wrong in this log?"
+```
+
+With `--exec`, the agent processes the prompt and exits. Combine with `--hide-tool-calls` for clean output or `--json` for machine-readable results.
+
+## Add more capabilities
+
+Extend your agent with persistent memory and web search:
+
+```yaml agent.yaml
+agents:
+  root:
+    model: anthropic/claude-sonnet-4-0
+    description: Research assistant with memory
+    instruction: |
+      You are a research assistant. Search the web for information,
+      remember important findings, and provide thorough analysis.
+    toolsets:
+      - type: think
+      - type: memory
+        path: ./research.db
+      - type: mcp
+        ref: docker:duckduckgo
+```
+
+<Note>
+  The `ref: docker:duckduckgo` syntax runs the DuckDuckGo MCP server in a Docker container. This is the recommended way to use MCP tools — secure, isolated, and easy to configure. Requires Docker Desktop.
+</Note>
+
+Run it the same way:
+
+```bash
+docker agent run agent.yaml
+```
+
+## What's next
+
+<CardGroup cols={2}>
+  <Card title="Understand agents" icon="robot" href="/concepts/agents">
+    Learn how agents work and what you can configure.
+  </Card>
+  <Card title="Multi-agent systems" icon="diagram-project" href="/concepts/multi-agent">
+    Build teams of collaborating agents.
+  </Card>
+  <Card title="Configuration reference" icon="gear" href="/configuration/overview">
+    Full reference for all YAML options.
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="/community/troubleshooting">
+    Debug tips and common fixes.
+  </Card>
+</CardGroup>

@@ -1,0 +1,169 @@
+---
+title: "Custom providers"
+description: "Connect docker-agent to any OpenAI-compatible API endpoint using the providers section."
+---
+
+The `providers` section lets you define reusable provider configurations for any OpenAI-compatible API — without modifying docker-agent's source code. This is useful for self-hosted models, API proxies, enterprise gateways, and any service that implements the OpenAI chat completions API.
+
+<Note>
+  If a service supports the `/v1/chat/completions` endpoint, you can use it with docker-agent. No source code changes are needed.
+</Note>
+
+## Provider configuration
+
+Define a provider under the top-level `providers` key:
+
+```yaml
+providers:
+  my_provider:
+    api_type: openai_chatcompletions  # openai_chatcompletions | openai_responses
+    base_url: https://api.example.com/v1
+    token_key: MY_API_KEY             # name of the env var holding the token
+```
+
+### Provider properties
+
+| Property | Description | Default |
+| --- | --- | --- |
+| `api_type` | API schema: `openai_chatcompletions` or `openai_responses` | `openai_chatcompletions` |
+| `base_url` | Base URL for the API endpoint | — |
+| `token_key` | Name of the environment variable containing the API token | — |
+
+## API types
+
+- **`openai_chatcompletions`** — Standard OpenAI Chat Completions API (`/v1/chat/completions`). Works with most OpenAI-compatible endpoints including vLLM, Ollama, LiteLLM, and Mistral.
+- **`openai_responses`** — OpenAI Responses API. Use this for newer OpenAI models that require the Responses API format.
+
+## Using a custom provider
+
+Reference the provider by name from a model definition, then reference the model from an agent:
+
+```yaml
+providers:
+  my_provider:
+    api_type: openai_chatcompletions
+    base_url: https://api.example.com/v1
+    token_key: MY_API_KEY
+
+models:
+  my_model:
+    provider: my_provider
+    model: gpt-4o
+    max_tokens: 32768
+
+agents:
+  root:
+    model: my_model
+    instruction: You are a helpful assistant.
+```
+
+## Shorthand syntax
+
+Once a provider is defined, you can reference it with the inline `provider/model` shorthand without defining a named model:
+
+```yaml
+agents:
+  root:
+    model: my_provider/gpt-4o-mini
+```
+
+The provider's `base_url`, `token_key`, and `api_type` are applied automatically.
+
+## How it works
+
+When you reference a custom provider, docker-agent:
+
+1. Applies the provider's `base_url` to the model (if not already set on the model).
+2. Applies the provider's `token_key` to the model (if not already set on the model).
+3. Stores the provider's `api_type` in `provider_opts.api_type`.
+4. Routes the request to the appropriate API client.
+
+## Examples
+
+<CodeGroup>
+
+```yaml vllm or ollama
+providers:
+  local_llm:
+    api_type: openai_chatcompletions
+    base_url: http://localhost:8000/v1
+    # no token_key needed for unauthenticated local servers
+
+models:
+  llama:
+    provider: local_llm
+    model: meta-llama/Llama-3.2-3B-Instruct
+
+agents:
+  root:
+    model: llama
+```
+
+```yaml API router (Requesty, LiteLLM)
+providers:
+  router:
+    api_type: openai_chatcompletions
+    base_url: https://router.requesty.ai/v1
+    token_key: REQUESTY_API_KEY
+
+agents:
+  root:
+    model: router/anthropic/claude-sonnet-4-0
+```
+
+```yaml Both api_type variants
+providers:
+  # Chat Completions provider (most common)
+  my_gateway:
+    api_type: openai_chatcompletions
+    base_url: https://api.example.com/
+    token_key: API_KEY_ENV_VAR_NAME
+
+  # Responses API provider
+  responses_provider:
+    api_type: openai_responses
+    base_url: https://responses.example.com/
+    token_key: API_KEY_ENV_VAR_NAME
+
+models:
+  gateway_model:
+    provider: my_gateway
+    model: gpt-4o
+    max_tokens: 32768
+    temperature: 0.7
+
+  responses_model:
+    provider: responses_provider
+    model: gpt-5
+    max_tokens: 16000
+
+agents:
+  root:
+    model: responses_model
+    instruction: You are a helpful assistant.
+
+  subagent:
+    model: my_gateway/gpt-4o-mini  # shorthand syntax
+    instruction: You are a specialized assistant.
+```
+
+```yaml Azure OpenAI
+models:
+  azure_model:
+    provider: azure
+    model: gpt-4o
+    base_url: https://your-resource.openai.azure.com
+    provider_opts:
+      api_version: 2024-12-01-preview
+
+agents:
+  root:
+    model: azure_model
+```
+
+</CodeGroup>
+
+## Related
+
+- [Local models](/providers/local) — Ollama, vLLM, and other local servers
+- [Model configuration](/configuration/models) — Full model config reference

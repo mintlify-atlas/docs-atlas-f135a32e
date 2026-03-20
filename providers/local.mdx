@@ -1,0 +1,194 @@
+---
+title: "Local models"
+description: "Run docker-agent with locally hosted models using Ollama, vLLM, LocalAI, or any OpenAI-compatible server."
+---
+
+docker-agent can connect to any OpenAI-compatible local model server. This lets you run models locally for privacy, offline use, or to avoid API costs.
+
+<Tip>
+  For the easiest local model experience, consider [Docker Model Runner](/providers/dmr), which is built into Docker Desktop and requires no additional setup.
+</Tip>
+
+## Ollama
+
+[Ollama](https://ollama.ai/) is a popular tool for running LLMs locally. docker-agent includes a built-in `ollama` alias for easy configuration.
+
+### Setup
+
+1. Install Ollama from [ollama.ai](https://ollama.ai/).
+2. Pull a model:
+
+   ```bash
+   ollama pull llama3.2
+   ollama pull qwen2.5-coder
+   ```
+
+3. Start the Ollama server (runs automatically after install on most platforms):
+
+   ```bash
+   ollama serve
+   ```
+
+### Configuration
+
+Use the built-in `ollama` alias — no API key required:
+
+```yaml
+agents:
+  root:
+    model: ollama/llama3.2
+    description: Local assistant
+    instruction: You are a helpful assistant.
+```
+
+The `ollama` alias uses:
+- **Base URL:** `http://localhost:11434/v1`
+- **API type:** OpenAI-compatible
+- **Auth:** None required
+
+### Custom host or port
+
+If Ollama runs on a different host or port, define a named model with an explicit `base_url`:
+
+```yaml
+models:
+  my_ollama:
+    provider: ollama
+    model: llama3.2
+    base_url: http://192.168.1.100:11434/v1
+
+agents:
+  root:
+    model: my_ollama
+    description: Remote Ollama assistant
+    instruction: You are a helpful assistant.
+```
+
+### Popular Ollama models
+
+| Model | Size | Best for |
+| --- | --- | --- |
+| `llama3.2` | 3B | General purpose, fast |
+| `llama3.1` | 8B | Better reasoning |
+| `qwen2.5-coder` | 7B | Code generation |
+| `mistral` | 7B | General purpose |
+| `codellama` | 7B | Code tasks |
+| `deepseek-coder` | 6.7B | Code generation |
+
+## vLLM
+
+[vLLM](https://github.com/vllm-project/vllm) is a high-performance inference server optimized for throughput.
+
+### Setup
+
+```bash
+pip install vllm
+
+python -m vllm.entrypoints.openai.api_server \
+  --model meta-llama/Llama-3.2-3B-Instruct \
+  --port 8000
+```
+
+### Configuration
+
+```yaml
+providers:
+  vllm:
+    api_type: openai_chatcompletions
+    base_url: http://localhost:8000/v1
+
+agents:
+  root:
+    model: vllm/meta-llama/Llama-3.2-3B-Instruct
+    description: vLLM-powered assistant
+    instruction: You are a helpful assistant.
+```
+
+## LocalAI
+
+[LocalAI](https://localai.io/) provides an OpenAI-compatible API that works with various model backends.
+
+### Setup
+
+```bash
+docker run -p 8080:8080 --name local-ai \
+  -v ./models:/models \
+  localai/localai:latest-cpu
+```
+
+### Configuration
+
+```yaml
+providers:
+  localai:
+    api_type: openai_chatcompletions
+    base_url: http://localhost:8080/v1
+
+agents:
+  root:
+    model: localai/gpt4all-j
+    description: LocalAI assistant
+    instruction: You are a helpful assistant.
+```
+
+## Any OpenAI-compatible server
+
+For any server that implements the `/v1/chat/completions` endpoint:
+
+```yaml
+providers:
+  my_server:
+    api_type: openai_chatcompletions
+    base_url: http://localhost:8000/v1
+    # token_key: MY_API_KEY  # if authentication is required
+
+agents:
+  root:
+    model: my_server/model-name
+    description: Custom server assistant
+    instruction: You are a helpful assistant.
+```
+
+## Performance considerations
+
+<Note>
+  - **Memory:** Larger models need more RAM or VRAM. A 7B model typically requires 8–16 GB RAM.
+  - **GPU:** GPU acceleration dramatically improves inference speed. Check your server's GPU support.
+  - **Context length:** Local models often have smaller context windows than cloud models.
+  - **Tool calling:** Not all local models support function/tool calling. Test your model's capabilities before deploying.
+</Note>
+
+## Example: offline development agent
+
+```yaml
+agents:
+  developer:
+    model: ollama/qwen2.5-coder
+    description: Offline code assistant
+    instruction: |
+      You are a software developer working offline.
+      Focus on code quality and clear explanations.
+    max_iterations: 20
+    toolsets:
+      - type: filesystem
+      - type: shell
+      - type: think
+      - type: todo
+```
+
+## Troubleshooting
+
+**Connection refused:** Ensure your model server is running and accessible:
+
+```bash
+curl http://localhost:11434/v1/models  # Ollama
+curl http://localhost:8000/v1/models   # vLLM
+```
+
+**Model not found:** Verify the model is downloaded:
+
+```bash
+ollama list  # list available Ollama models
+```
+
+**Slow responses:** Check that GPU acceleration is enabled, try a smaller model, or reduce `max_tokens` in your config.

@@ -1,0 +1,239 @@
+---
+title: "Troubleshooting"
+description: "Common issues and how to resolve them when working with docker-agent."
+---
+
+## Debug mode
+
+Enable debug logging as a first step for any issue. It writes a detailed trace of all API calls, tool executions, and internal events:
+
+```bash
+# Logs to ~/.cagent/cagent.debug.log by default
+docker agent run config.yaml --debug
+
+# Write to a custom location
+docker agent run config.yaml --debug --log-file ./debug.log
+
+# Enable OpenTelemetry tracing for deeper analysis
+docker agent run config.yaml --otel
+```
+
+<Tip>
+  Always enable `--debug` when reporting issues. Attach the log file to your GitHub issue.
+</Tip>
+
+## Common errors
+
+<AccordionGroup>
+  <Accordion title="Context window exceeded">
+    **Error message:** `context_length_exceeded` or similar.
+
+    - Use `/compact` in the TUI to summarize and reduce conversation history
+    - Set `num_history_items` in your agent config to limit messages sent per turn
+    - Switch to a model with a larger context window (for example, Claude 200K or Gemini 2M)
+    - Break large tasks into smaller conversations
+  </Accordion>
+
+  <Accordion title="Max iterations reached">
+    The agent hit its `max_iterations` limit without completing the task.
+
+    - Increase `max_iterations` in the agent config (default is unlimited, but many agents set 20–50)
+    - Enable `--debug` to check whether the agent is looping on the same tool call
+    - Break complex tasks into smaller steps
+  </Accordion>
+
+  <Accordion title="Model fallback triggered">
+    When the primary model fails, docker-agent automatically switches to configured fallback models. Look for log messages like `"Switching to fallback model"`.
+
+    | Error code | Behavior |
+    | --- | --- |
+    | HTTP 429 | Rate limited — stays on fallback for the cooldown period |
+    | HTTP 5xx | Retries with exponential backoff, then falls back |
+    | HTTP 4xx | Client error — skips directly to next fallback model |
+
+    Configure fallback behavior in your agent config:
+
+    ```yaml
+    agents:
+      root:
+        model: anthropic/claude-sonnet-4-0
+        fallback:
+          models: [openai/gpt-4o, openai/gpt-4o-mini]
+          retries: 2
+          cooldown: 1m
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Agent not responding
+
+<AccordionGroup>
+  <Accordion title="API key not set">
+    Each model provider requires its own API key as an environment variable:
+
+    | Provider | Environment variable |
+    | --- | --- |
+    | OpenAI | `OPENAI_API_KEY` |
+    | Anthropic | `ANTHROPIC_API_KEY` |
+    | Google Gemini | `GOOGLE_API_KEY` |
+    | Mistral | `MISTRAL_API_KEY` |
+    | xAI | `XAI_API_KEY` |
+    | AWS Bedrock | `AWS_BEARER_TOKEN_BEDROCK` or AWS credentials chain |
+
+    ```bash
+    # Check that your keys are set
+    env | grep API_KEY
+    ```
+  </Accordion>
+
+  <Accordion title="Incorrect model name">
+    Model names must match the provider's naming exactly. Common mistakes:
+
+    - Using `gpt-4` instead of `gpt-4o`
+    - Using a deprecated model name
+    - Model references are case-sensitive: `openai/gpt-4o` ≠ `openai/GPT-4o`
+  </Accordion>
+
+  <Accordion title="Network connectivity">
+    If the agent hangs or times out without an error message, check that your machine can reach the provider's API endpoint. Firewalls, VPNs, and proxy settings can silently block outbound requests.
+  </Accordion>
+</AccordionGroup>
+
+## Tool execution failures
+
+<AccordionGroup>
+  <Accordion title="MCP tools not found or failing">
+    - Ensure the MCP tool command is installed and on your `PATH`
+    - Check file permissions — tools must be executable
+    - Test MCP tools independently before integrating with docker-agent
+    - For Docker-based MCP tools (`ref: docker:*`), ensure Docker Desktop is running
+  </Accordion>
+
+  <Accordion title="Filesystem or shell tool errors">
+    - Verify the agent has the correct toolset configured (`type: filesystem`, `type: shell`)
+    - Check that the working directory exists and is accessible
+    - On macOS, ensure the terminal app has the necessary permissions (for example, Full Disk Access)
+  </Accordion>
+
+  <Accordion title="MCP tool lifecycle issues">
+    MCP tools using stdio transport must complete the initialization handshake before becoming available. If tools fail silently:
+
+    1. Enable `--debug` and look for MCP protocol messages in the log
+    2. Check that the MCP server process starts and responds to `initialize`
+    3. Verify that environment variables required by the tool are set (check `env` and `env_file` in the toolset config)
+  </Accordion>
+</AccordionGroup>
+
+## Configuration errors
+
+<AccordionGroup>
+  <Accordion title="YAML syntax issues">
+    docker-agent validates config at startup and reports errors with line numbers. Common problems:
+
+    - Incorrect indentation (YAML is whitespace-sensitive)
+    - Missing quotes around values containing special characters (`:`, `#`, `{`, `}`)
+    - Tabs instead of spaces
+
+    <Tip>
+      Use the [JSON schema](https://github.com/docker/docker-agent/blob/main/agent-schema.json) in your editor for real-time validation and autocompletion.
+    </Tip>
+  </Accordion>
+
+  <Accordion title="Missing references">
+    - All agents listed in `sub_agents` must be defined in the `agents` section
+    - Named model references must exist in the `models` section (or use inline format like `openai/gpt-4o`)
+    - RAG source names referenced by agents must be defined in the `rag` section
+  </Accordion>
+
+  <Accordion title="Toolset validation errors">
+    - The `path` field is only valid for `memory` toolsets
+    - MCP toolsets need either `command` (stdio), `remote` (SSE/HTTP), or `ref` (Docker)
+    - Provider names must be one of the supported values: `openai`, `anthropic`, `google`, `amazon-bedrock`, `dmr`, etc.
+  </Accordion>
+</AccordionGroup>
+
+## Session and connectivity issues
+
+<AccordionGroup>
+  <Accordion title="Port conflicts">
+    When running docker-agent as an API server or MCP server, ensure the port is not already in use:
+
+    ```bash
+    # Check if port 8080 is in use
+    lsof -i :8080
+
+    # Use a different port
+    docker agent serve api config.yaml --listen :9090
+    ```
+  </Accordion>
+
+  <Accordion title="MCP endpoint not reachable">
+    For remote MCP servers, verify the endpoint is accessible:
+
+    ```bash
+    # Test an SSE endpoint
+    curl -v https://mcp-server.example.com/sse
+    ```
+  </Accordion>
+
+  <Accordion title="Sessions mixing up in API server mode">
+    In API server mode, each client receives isolated sessions. If sessions appear to bleed into each other:
+
+    - Verify that client IDs are unique per connection
+    - Check session timeouts and cleanup events in the debug log
+  </Accordion>
+</AccordionGroup>
+
+## Performance issues
+
+<AccordionGroup>
+  <Accordion title="High memory usage">
+    - Large context windows (64K+ tokens) consume significant memory — consider reducing `max_tokens`
+    - Set `num_history_items` in the agent config to cap conversation history
+    - For DMR (local models), tune `runtime_flags` for your hardware (for example, `--ngl` for GPU layers)
+  </Accordion>
+
+  <Accordion title="Slow responses">
+    - Check if MCP tools are adding latency — this is visible in the debug log as time between tool call and result events
+    - Use `/cost` in the TUI to see token usage and identify expensive interactions
+  </Accordion>
+</AccordionGroup>
+
+## Log analysis
+
+When reviewing debug logs, search for these patterns:
+
+| Log pattern | What it indicates |
+| --- | --- |
+| `"Starting runtime stream"` | Agent execution beginning |
+| `"Tool call"` | A tool is being executed |
+| `"Tool call result"` | Tool execution completed |
+| `"Stream stopped"` | Agent finished processing |
+| `HTTP 429` | Rate limiting — consider adding a fallback model |
+| `context canceled` | Operation was interrupted (timeout or user cancel) |
+| `[RAG Manager]` | RAG retrieval operations |
+| `[Reranker]` | Reranking operations |
+
+## Agent store issues
+
+<AccordionGroup>
+  <Accordion title="Pull or push failures">
+    ```bash
+    # Test registry connectivity
+    docker pull docker.io/username/agent:latest
+
+    # Verify pulled agent content
+    docker agent share pull docker.io/username/agent:latest
+    ```
+  </Accordion>
+
+  <Accordion title="Agent content issues after pull">
+    - Validate the YAML locally with `docker agent run` before pushing
+    - Check that resources referenced in the config (MCP tools, files) are available on the target machine
+    - For auto-refresh (`--pull-interval`), verify that the registry is reachable from the server
+  </Accordion>
+</AccordionGroup>
+
+<Warning>
+  If these steps don't resolve your issue, file a bug on the [GitHub issue tracker](https://github.com/docker/docker-agent/issues) with your debug log attached, or ask on [Slack](https://dockercommunity.slack.com/archives/C09DASHHRU4).
+</Warning>

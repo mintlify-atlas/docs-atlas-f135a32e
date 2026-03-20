@@ -1,0 +1,304 @@
+---
+title: "Agent configuration"
+description: "Complete reference for all fields in an agent definition."
+---
+
+Agents are defined under the top-level `agents` key. Each entry is a named agent with its own model, instruction, toolsets, and optional behavior configuration.
+
+```yaml
+agents:
+  agent_name:
+    model: string
+    description: string
+    instruction: string
+    # ... additional fields
+```
+
+<Tip>
+  See [Models](/configuration/models) for model field details, [Tools](/configuration/tools) for toolset options, and [Multi-Agent](/concepts/multi-agent) for sub-agent patterns.
+</Tip>
+
+## Full schema
+
+```yaml
+agents:
+  root:
+    model: string                    # required
+    description: string              # required
+    instruction: string              # required
+    sub_agents: []                   # optional
+    toolsets: []                     # optional
+    rag: []                          # optional
+    fallback:                        # optional
+      models: []
+      retries: 2
+      cooldown: 1m
+    add_date: false                  # optional
+    add_environment_info: false      # optional
+    add_prompt_files: []             # optional
+    add_description_parameter: false # optional
+    code_mode_tools: false           # optional
+    max_iterations: 0                # optional
+    max_consecutive_tool_calls: 0    # optional
+    num_history_items: 0             # optional
+    skills: false                    # optional
+    commands: {}                     # optional
+    welcome_message: string          # optional
+    handoffs: []                     # optional
+    hooks: {}                        # optional
+    structured_output: {}            # optional
+```
+
+## Fields
+
+<ParamField path="model" type="string" required>
+  Model reference. Either an inline `provider/model-name` string (e.g., `openai/gpt-4o`) or the name of a model defined in the top-level `models` section.
+</ParamField>
+
+<ParamField path="description" type="string" required>
+  Short description of the agent's purpose. Used by coordinator agents to decide which sub-agent to delegate to.
+</ParamField>
+
+<ParamField path="instruction" type="string" required>
+  System prompt that defines the agent's behavior, personality, and constraints. Supports multi-line YAML strings with `|`.
+</ParamField>
+
+<ParamField path="toolsets" type="array">
+  List of tool configurations. Each entry is an object with at minimum a `type` field. See [Tools](/configuration/tools) for all toolset types and options.
+</ParamField>
+
+<ParamField path="sub_agents" type="string[]">
+  Names of other agents this agent can delegate tasks to. Adding sub-agents automatically enables the `transfer_task` tool. See [Multi-Agent](/concepts/multi-agent).
+</ParamField>
+
+<ParamField path="fallback" type="object">
+  Automatic model failover configuration. See [Fallback configuration](#fallback-configuration) below.
+</ParamField>
+
+<ParamField path="add_date" type="boolean" default="false">
+  When `true`, injects the current date into the agent's context at the start of each session.
+</ParamField>
+
+<ParamField path="add_environment_info" type="boolean" default="false">
+  When `true`, injects working directory, OS, CPU architecture, and git repository info into the agent's context.
+</ParamField>
+
+<ParamField path="add_prompt_files" type="string[]">
+  List of file paths whose contents are appended to the system prompt. Useful for including coding standards, guidelines, or additional context files.
+</ParamField>
+
+<ParamField path="add_description_parameter" type="boolean" default="false">
+  When `true`, adds agent descriptions as a parameter in tool schemas. Helps with tool selection in multi-agent scenarios.
+</ParamField>
+
+<ParamField path="code_mode_tools" type="boolean" default="false">
+  When `true`, formats tool responses in a code-optimized format with structured output schemas. Useful for MCP gateway and programmatic access.
+</ParamField>
+
+<ParamField path="max_iterations" type="number" default="0">
+  Maximum number of tool-calling loops. `0` means unlimited. Set this to prevent runaway loops — a value of 20–50 is typical for development agents.
+</ParamField>
+
+<ParamField path="max_consecutive_tool_calls" type="number" default="0">
+  Maximum number of tool calls the agent can make in a row without an intermediate model response. `0` means unlimited.
+</ParamField>
+
+<ParamField path="num_history_items" type="number" default="0">
+  Limit the number of conversation history messages sent to the model. `0` sends all messages. Useful for managing context window size in long conversations.
+</ParamField>
+
+<ParamField path="rag" type="string[]">
+  Names of RAG configurations to attach as retrieval tools. References sources defined in the top-level `rag` section. See [RAG](/features/rag).
+</ParamField>
+
+<ParamField path="skills" type="boolean | string[]">
+  Enable skill discovery. `true` loads skills from standard local directories. Pass a list of URLs to also load remote skills.
+</ParamField>
+
+<ParamField path="commands" type="object">
+  Named prompts that can be run with `/command_name` in the TUI or `docker agent run config.yaml /command_name` from the CLI. See [Named commands](#named-commands).
+</ParamField>
+
+<ParamField path="welcome_message" type="string">
+  Message displayed to the user when a session starts. Useful for providing context or instructions.
+</ParamField>
+
+<ParamField path="handoffs" type="string[]">
+  List of A2A agent names this agent can delegate to. See [A2A Protocol](/features/a2a).
+</ParamField>
+
+<ParamField path="hooks" type="object">
+  Lifecycle hooks for running shell commands at various points. See [Hooks](/configuration/hooks).
+</ParamField>
+
+<ParamField path="structured_output" type="object">
+  Constrain agent output to match a JSON schema. See [Structured output](/configuration/structured-output).
+</ParamField>
+
+<Warning>
+  `max_iterations` defaults to `0` (unlimited). Always set this for agents with powerful tools like `shell` to prevent infinite loops.
+</Warning>
+
+## Fallback configuration
+
+Agents can automatically fail over to backup models when the primary fails or is rate-limited.
+
+<ParamField path="fallback.models" type="string[]">
+  Ordered list of fallback models to try. Each entry can be an inline `provider/model` string or a named model from the `models` section.
+</ParamField>
+
+<ParamField path="fallback.retries" type="number" default="2">
+  Number of retries per model with exponential backoff. Applies to retryable errors (5xx, timeouts). Use `-1` to disable retries entirely.
+</ParamField>
+
+<ParamField path="fallback.cooldown" type="string" default="1m">
+  How long to stick with a successful fallback before retrying the primary. Triggered after a non-retryable error (e.g., HTTP 429). Uses Go duration format: `30s`, `1m`, `2m30s`.
+</ParamField>
+
+**Error handling behavior:**
+
+| Error type                  | Behavior                                  |
+| --------------------------- | ----------------------------------------- |
+| HTTP 5xx, 408, network timeout | Retry same model with exponential backoff |
+| HTTP 429 (rate limit)       | Skip to next fallback model               |
+| HTTP 4xx (client error)     | Skip to next fallback model               |
+
+```yaml
+agents:
+  root:
+    model: anthropic/claude-sonnet-4-0
+    fallback:
+      models:
+        - openai/gpt-4o
+        - google/gemini-2.5-flash
+      retries: 2
+      cooldown: 1m
+```
+
+## Named commands
+
+Define reusable prompt shortcuts callable from the TUI or CLI:
+
+```yaml
+agents:
+  root:
+    model: openai/gpt-4o
+    instruction: You are a system administrator.
+    commands:
+      df: "Check how much free space I have on my disk"
+      logs: "Show me the last 50 lines of system logs"
+      greet: "Say hello to ${env.USER}"
+      deploy: "Deploy ${env.PROJECT_NAME || 'app'} to ${env.ENV || 'staging'}"
+```
+
+```bash
+# Run commands from the CLI
+docker agent run agent.yaml /df
+docker agent run agent.yaml /greet
+PROJECT_NAME=myapp ENV=production docker agent run agent.yaml /deploy
+```
+
+Commands support JavaScript template literal syntax for environment variable interpolation. Undefined variables expand to empty strings.
+
+## Welcome message
+
+Display a message when users start a session:
+
+```yaml
+agents:
+  assistant:
+    model: openai/gpt-4o
+    description: Development assistant
+    instruction: You are a helpful coding assistant.
+    welcome_message: |
+      Welcome! I'm your development assistant.
+
+      I can help you with:
+      - Writing and reviewing code
+      - Running tests and debugging
+      - Explaining concepts
+
+      What would you like to work on?
+```
+
+## Deferred tool loading
+
+Use `defer: true` on a toolset to load its tools on-demand and speed up agent startup:
+
+```yaml
+agents:
+  root:
+    model: anthropic/claude-sonnet-4-0
+    description: Multi-purpose assistant
+    instruction: You have access to many tools.
+    toolsets:
+      - type: mcp
+        ref: docker:github-official
+        defer: true       # loaded on first use
+      - type: filesystem  # loaded immediately
+```
+
+You can also defer specific tools within a toolset:
+
+```yaml
+toolsets:
+  - type: mcp
+    ref: docker:github-official
+    defer:
+      - "list_issues"
+      - "search_repos"
+```
+
+## Complete example
+
+```yaml
+models:
+  claude:
+    provider: anthropic
+    model: claude-sonnet-4-0
+    max_tokens: 64000
+
+agents:
+  root:
+    model: claude
+    description: Technical lead coordinating development
+    instruction: |
+      You are a technical lead. Analyze requests and delegate
+      to the right specialist. Always review work before responding.
+    welcome_message: "I'm your tech lead. How can I help today?"
+    sub_agents: [developer, researcher]
+    add_date: true
+    add_environment_info: true
+    max_iterations: 20
+    fallback:
+      models: [openai/gpt-4o]
+    toolsets:
+      - type: think
+    commands:
+      review: "Review all recent code changes for issues"
+    hooks:
+      session_start:
+        - type: command
+          command: "./scripts/setup.sh"
+
+  developer:
+    model: claude
+    description: Expert software developer
+    instruction: Write clean, tested, production-ready code.
+    max_iterations: 30
+    toolsets:
+      - type: filesystem
+      - type: shell
+      - type: think
+      - type: todo
+
+  researcher:
+    model: openai/gpt-4o
+    description: Web researcher with memory
+    instruction: Search for information and remember findings.
+    toolsets:
+      - type: mcp
+        ref: docker:duckduckgo
+      - type: memory
+        path: ./research.db
+```

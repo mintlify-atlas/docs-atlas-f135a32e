@@ -1,0 +1,89 @@
+---
+title: "OpenAI"
+description: "Use GPT-4o, GPT-5, GPT-5-mini, and other OpenAI models with docker-agent."
+---
+
+## Setup
+
+1. Get an API key from [platform.openai.com](https://platform.openai.com/api-keys).
+2. Set the environment variable:
+
+```bash
+export OPENAI_API_KEY="sk-..."
+```
+
+## Configuration
+
+<Tabs>
+  <Tab title="Inline">
+    ```yaml
+    agents:
+      root:
+        model: openai/gpt-4o
+    ```
+  </Tab>
+  <Tab title="Named model">
+    ```yaml
+    models:
+      gpt:
+        provider: openai
+        model: gpt-4o
+        temperature: 0.7
+        max_tokens: 4000
+
+    agents:
+      root:
+        model: gpt
+    ```
+  </Tab>
+</Tabs>
+
+## Available models
+
+| Model | Best for | Notes |
+| --- | --- | --- |
+| `gpt-5` | Most capable, complex reasoning | Highest capability |
+| `gpt-5-mini` | Fast, cost-effective, good reasoning | Recommended default |
+| `gpt-4o` | Multimodal, balanced performance | Vision support |
+| `gpt-4o-mini` | Simple tasks, lowest cost | Fastest |
+
+For a complete and up-to-date list, see [modelname.ai](https://modelname.ai/).
+
+## Thinking budget
+
+OpenAI reasoning models support an effort level string:
+
+```yaml
+models:
+  gpt-thinking:
+    provider: openai
+    model: gpt-5-mini
+    thinking_budget: medium  # minimal | low | medium (default) | high
+```
+
+To disable thinking:
+
+```yaml
+models:
+  gpt:
+    provider: openai
+    model: gpt-5-mini
+    thinking_budget: none
+```
+
+## Custom endpoint
+
+Use `base_url` to connect to OpenAI-compatible APIs such as proxies or Azure OpenAI:
+
+```yaml
+models:
+  proxied:
+    provider: openai
+    model: gpt-4o
+    base_url: https://your-proxy.example.com/v1
+    token_key: PROXY_API_KEY  # optional if auth is required
+```
+
+<Tip>
+  For reusable proxy configuration across multiple models, define a custom provider in the `providers` section. See [Custom providers](/providers/custom).
+</Tip>

@@ -1,0 +1,111 @@
+---
+title: "Todo"
+description: "Task list management for complex multi-step workflows."
+---
+
+The todo tool provides task list management. Agents can create, update, and track tasks with status tracking across a workflow. It is useful for complex multi-step tasks where the agent needs to stay organized and ensure all steps are completed.
+
+## Available tools
+
+| Tool | Description |
+| --- | --- |
+| `create_todo` | Create a single new task. |
+| `create_todos` | Create multiple tasks at once. |
+| `update_todos` | Update the status of one or more tasks. |
+| `list_todos` | List all current tasks with their status. |
+
+## Task statuses
+
+| Status | Meaning |
+| --- | --- |
+| `pending` | Task has not been started. |
+| `in-progress` | Task is currently being worked on. |
+| `completed` | Task is finished. |
+
+## Configuration
+
+```yaml
+toolsets:
+  - type: todo
+```
+
+### Options
+
+<ParamField path="shared" type="boolean" default="false">
+  When `true`, todos are shared across all agents in a multi-agent configuration. All agents can view and update the same task list.
+</ParamField>
+
+### Shared todos in multi-agent setups
+
+Enable shared todos so all agents in a team can coordinate around a common task list:
+
+```yaml
+agents:
+  coordinator:
+    model: openai/gpt-4o
+    description: Project coordinator
+    instruction: Break work into tasks and delegate to specialists.
+    sub_agents: [developer, reviewer]
+    toolsets:
+      - type: todo
+        shared: true
+      - type: think
+
+  developer:
+    model: anthropic/claude-sonnet-4-0
+    description: Software developer
+    toolsets:
+      - type: todo
+        shared: true
+      - type: filesystem
+      - type: shell
+
+  reviewer:
+    model: openai/gpt-4o
+    description: Code reviewer
+    toolsets:
+      - type: todo
+        shared: true
+      - type: filesystem
+```
+
+## Example agent
+
+```yaml agent.yaml
+agents:
+  root:
+    model: openai/gpt-4o
+    description: Project assistant
+    instruction: |
+      When given a complex task:
+      1. Use create_todos to list all the steps.
+      2. Mark each step in-progress before you start it.
+      3. Mark it completed when done.
+      This keeps the user informed of your progress.
+    toolsets:
+      - type: todo
+      - type: think
+      - type: filesystem
+      - type: shell
+```
+
+<Tip>
+  Combine `todo` with `think` for complex workflows: use `think` to plan, then `create_todos` to record the steps before executing them.
+</Tip>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Think" icon="brain" href="/tools/think">
+    Reason and plan before creating tasks.
+  </Card>
+  <Card title="Background agents" icon="layers" href="/tools/background-agents">
+    Run tasks in parallel with sub-agents.
+  </Card>
+  <Card title="Transfer task" icon="arrow-right" href="/tools/transfer-task">
+    Delegate tasks to specialized sub-agents.
+  </Card>
+  <Card title="Multi-agent" icon="network" href="/concepts/multi-agent">
+    Multi-agent coordination patterns.
+  </Card>
+</CardGroup>

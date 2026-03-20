@@ -1,0 +1,110 @@
+---
+title: "Docker Agent"
+description: "Build, run, and share AI agents with a declarative YAML config, rich tool ecosystem, and multi-agent orchestration — by Docker."
+---
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/getting-started/installation">
+    Install Docker Agent on your platform
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/getting-started/quickstart">
+    Get your first agent running in minutes
+  </Card>
+  <Card title="Core Concepts" icon="lightbulb" href="/concepts/agents">
+    Understand agents, models, tools, and multi-agent orchestration
+  </Card>
+  <Card title="Configuration Reference" icon="gear" href="/configuration/overview">
+    Complete reference for agent, model, and tool configuration
+  </Card>
+</CardGroup>
+
+## What is Docker Agent?
+
+`docker-agent` lets you create and run intelligent AI agents that collaborate to solve complex problems — no code required.
+
+It is a `docker` CLI plugin and can be run with `docker agent`. Define agents in YAML, give them tools, and let them work.
+
+```yaml agent.yaml
+agents:
+  root:
+    model: openai/gpt-4o
+    description: A helpful AI assistant
+    instruction: |
+      You are a knowledgeable assistant that helps users with various tasks.
+      Be helpful, accurate, and concise in your responses.
+    toolsets:
+      - type: mcp
+        ref: docker:duckduckgo
+```
+
+```bash
+docker agent run agent.yaml
+```
+
+## Key features
+
+<CardGroup cols={2}>
+  <Card title="Multi-agent architecture" icon="users">
+    Create teams of specialized agents that delegate tasks to each other automatically via a coordinator.
+  </Card>
+  <Card title="Rich tool ecosystem" icon="wrench">
+    Built-in tools for filesystem, shell, memory, and more. Extend with any MCP server — local, remote, or Docker-based.
+  </Card>
+  <Card title="AI provider agnostic" icon="brain">
+    OpenAI, Anthropic, Gemini, AWS Bedrock, Docker Model Runner, and more. Switch providers without changing agent logic.
+  </Card>
+  <Card title="YAML configuration" icon="file-code">
+    Declarative, versionable, shareable agent configs. No framework code required.
+  </Card>
+  <Card title="Package and share" icon="box">
+    Push agents to any OCI-compatible registry. Pull and run them anywhere — just like container images.
+  </Card>
+  <Card title="Multiple interfaces" icon="display">
+    Beautiful TUI for interactive sessions, CLI for scripting, HTTP API for integrations, and MCP mode for interop.
+  </Card>
+  <Card title="Advanced reasoning" icon="thought-bubble">
+    Built-in think, todo, and memory tools for complex multi-step reasoning and context retention.
+  </Card>
+  <Card title="RAG support" icon="database">
+    Pluggable retrieval with BM25, embeddings, hybrid search, and reranking for knowledge-grounded agents.
+  </Card>
+</CardGroup>
+
+## Quick example
+
+```bash
+# Run the default agent
+docker agent run
+
+# Run from the agent catalog
+docker agent run agentcatalog/pirate
+
+# Generate a new agent interactively
+docker agent new
+
+# Run your own config
+docker agent run agent.yaml
+```
+
+## Explore the docs
+
+<CardGroup cols={3}>
+  <Card title="Agents" icon="robot" href="/concepts/agents">
+    Learn about agent structure and configuration
+  </Card>
+  <Card title="Models" icon="cpu" href="/concepts/models">
+    Configure AI models and providers
+  </Card>
+  <Card title="Tools" icon="hammer" href="/concepts/tools">
+    Give your agents capabilities with tools
+  </Card>
+  <Card title="Multi-Agent" icon="diagram-project" href="/concepts/multi-agent">
+    Build teams of collaborating agents
+  </Card>
+  <Card title="TUI" icon="terminal" href="/features/tui">
+    Interactive terminal UI for agent sessions
+  </Card>
+  <Card title="MCP Mode" icon="plug" href="/features/mcp-mode">
+    Expose agents as MCP tools
+  </Card>
+</CardGroup>

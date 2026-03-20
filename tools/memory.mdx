@@ -1,0 +1,90 @@
+---
+title: "Memory"
+description: "Persistent key-value storage backed by SQLite for cross-session recall."
+---
+
+The memory tool provides persistent storage backed by SQLite. Data survives across sessions, allowing agents to remember facts, user preferences, project context, and past decisions. Memories can be organized with categories and searched by keyword.
+
+Each agent gets its own database at `~/.cagent/memory/<agent-name>/memory.db` by default.
+
+## Available tools
+
+| Tool | Description |
+| --- | --- |
+| `add_memory` | Store a new memory with optional category. |
+| `get_memories` | Retrieve all stored memories. |
+| `search_memories` | Search memories by keywords and/or category — more efficient than `get_memories`. |
+| `update_memory` | Update an existing memory's content or category by ID. |
+| `delete_memory` | Delete a specific memory by ID. |
+
+## Configuration
+
+```yaml
+toolsets:
+  - type: memory
+```
+
+### Options
+
+<ParamField path="path" type="string" default="~/.cagent/memory/<agent-name>/memory.db">
+  Path to the SQLite database file. Use a relative path to store the database alongside your agent configuration.
+</ParamField>
+
+### Custom database path
+
+```yaml
+toolsets:
+  - type: memory
+    path: ./agent-memory.db
+```
+
+## Memory categories
+
+Memories support an optional `category` field for organization and filtering. Use categories consistently so the agent can search efficiently.
+
+Common categories:
+
+| Category | Purpose |
+| --- | --- |
+| `preference` | User preferences and settings |
+| `fact` | Factual information about the project or user |
+| `project` | Project-specific context and conventions |
+| `decision` | Past decisions and their rationale |
+
+## Example agent
+
+```yaml mem.yaml
+agents:
+  root:
+    model: openai/gpt-4o
+    description: Personalized assistant with long-term memory
+    instruction: |
+      You are a helpful assistant with persistent memory.
+      When you learn something important about the user or project,
+      store it with add_memory so you can recall it in future sessions.
+      Before answering questions, search your memory for relevant context.
+    toolsets:
+      - type: memory
+        path: ./assistant-memory.db
+```
+
+<Tip>
+  Memory is especially useful for long-running assistants that need to recall context across conversations — such as coding preferences, project conventions, or decisions made in previous sessions.
+</Tip>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Think" icon="brain" href="/tools/think">
+    Reason through problems before acting.
+  </Card>
+  <Card title="Todo" icon="list-checks" href="/tools/todo">
+    Track tasks across multi-step workflows.
+  </Card>
+  <Card title="Agents" icon="robot" href="/concepts/agents">
+    Agent configuration reference.
+  </Card>
+  <Card title="Configuration" icon="gear" href="/configuration/tools">
+    Full toolset configuration reference.
+  </Card>
+</CardGroup>

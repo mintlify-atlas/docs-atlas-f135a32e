@@ -1,0 +1,91 @@
+---
+title: "Google Gemini"
+description: "Use Gemini 2.5 Flash, Gemini 3 Pro, and other Google models with docker-agent."
+---
+
+## Setup
+
+1. Get an API key from [aistudio.google.com](https://aistudio.google.com/app/apikey).
+2. Set the environment variable:
+
+```bash
+export GOOGLE_API_KEY="AI..."
+```
+
+## Configuration
+
+<Tabs>
+  <Tab title="Inline">
+    ```yaml
+    agents:
+      root:
+        model: google/gemini-2.5-flash
+    ```
+  </Tab>
+  <Tab title="Named model">
+    ```yaml
+    models:
+      gemini:
+        provider: google
+        model: gemini-2.5-flash
+        temperature: 0.5
+
+    agents:
+      root:
+        model: gemini
+    ```
+  </Tab>
+</Tabs>
+
+## Available models
+
+| Model | Best for |
+| --- | --- |
+| `gemini-3-pro` | Most capable Gemini model |
+| `gemini-3-flash` | Fast, efficient, good balance |
+| `gemini-2.5-flash` | Fast inference, cost-effective |
+| `gemini-2.5-pro` | Strong reasoning, large context |
+
+## Thinking budget
+
+Thinking budget configuration differs between Gemini 2.5 and Gemini 3 model families.
+
+<Warning>
+  Gemini 2.5 uses **token-based** budgets (integers). Gemini 3 uses **level-based** budgets (strings). Use the correct format for your model version.
+</Warning>
+
+<Tabs>
+  <Tab title="Gemini 2.5 (token-based)">
+    ```yaml
+    models:
+      gemini-no-thinking:
+        provider: google
+        model: gemini-2.5-flash
+        thinking_budget: 0     # disable thinking
+
+      gemini-dynamic:
+        provider: google
+        model: gemini-2.5-flash
+        thinking_budget: -1    # dynamic — model decides (default)
+
+      gemini-fixed:
+        provider: google
+        model: gemini-2.5-flash
+        thinking_budget: 8192  # fixed token budget
+    ```
+  </Tab>
+  <Tab title="Gemini 3 (level-based)">
+    ```yaml
+    models:
+      gemini-3-pro:
+        provider: google
+        model: gemini-3-pro
+        thinking_budget: high    # default for Pro: low | high
+
+      gemini-3-flash:
+        provider: google
+        model: gemini-3-flash
+        thinking_budget: medium  # default for Flash: minimal | low | medium | high
+    ```
+  </Tab>
+</Tabs>

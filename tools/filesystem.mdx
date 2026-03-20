@@ -1,0 +1,112 @@
+---
+title: "Filesystem"
+description: "Read, write, list, search, and navigate files and directories."
+---
+
+The filesystem tool gives agents the ability to explore codebases, read and edit files, create new files, search across files, and navigate directory structures. Paths are resolved relative to the working directory, though agents can also use absolute paths.
+
+## Available tools
+
+| Tool | Description |
+| --- | --- |
+| `read_file` | Read the complete contents of a file. Supports text files and images (jpg, png, gif, webp). |
+| `read_multiple_files` | Read several files in one call — more efficient than sequential `read_file` calls. |
+| `write_file` | Create or overwrite a file with new content. Creates parent directories automatically. |
+| `edit_file` | Make find-and-replace edits to an existing file without rewriting the entire content. |
+| `list_directory` | List files and directories at a given path. |
+| `directory_tree` | Recursive tree view of a directory as a JSON structure. |
+| `search_files_content` | Search for text or regex patterns across files. |
+| `create_directory` | Create one or more directories (including nested structures). |
+| `remove_directory` | Remove one or more empty directories. |
+
+## Configuration
+
+```yaml
+toolsets:
+  - type: filesystem
+```
+
+### Options
+
+<ParamField path="ignore_vcs" type="boolean" default="false">
+  When `true`, ignores `.gitignore` patterns and includes all files in listings and searches.
+</ParamField>
+
+<ParamField path="post_edit" type="array">
+  Commands to run automatically after any file is edited or written.
+</ParamField>
+
+<ParamField path="post_edit[].path" type="string">
+  Glob pattern that determines which files trigger this command (e.g. `*.go`, `src/**/*.ts`).
+</ParamField>
+
+<ParamField path="post_edit[].cmd" type="string">
+  Shell command to run. Use `${file}` to reference the absolute path of the edited file.
+</ParamField>
+
+## Post-edit hooks
+
+Automatically format or lint files after the agent edits them:
+
+```yaml
+toolsets:
+  - type: filesystem
+    post_edit:
+      - path: "*.go"
+        cmd: "gofmt -w ${file}"
+      - path: "*.ts"
+        cmd: "prettier --write ${file}"
+      - path: "*.py"
+        cmd: "black ${file}"
+```
+
+## Example agent
+
+```yaml agent.yaml
+agents:
+  root:
+    model: openai/gpt-4o
+    description: Coding assistant with filesystem access
+    instruction: |
+      You are a coding assistant. Use the filesystem tools to read and
+      modify code. Always check the current content before editing.
+    toolsets:
+      - type: filesystem
+        post_edit:
+          - path: "*.go"
+            cmd: "gofmt -w ${file}"
+```
+
+<Tip>
+  Use `read_multiple_files` to read several files in a single tool call rather than calling `read_file` repeatedly. This reduces the number of round-trips and speeds up multi-file analysis.
+</Tip>
+
+## Security considerations
+
+<Warning>
+  The filesystem tool can read and write any file accessible to the process. Use the `instruction` field to scope the agent to specific directories, and configure [Permissions](/configuration/permissions) to require confirmation before writes:
+
+  ```yaml
+  permissions:
+    ask:
+      - write_file
+      - edit_file
+  ```
+</Warning>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Shell" icon="terminal" href="/tools/shell">
+    Execute commands alongside file operations.
+  </Card>
+  <Card title="LSP" icon="code" href="/tools/lsp">
+    Add code intelligence on top of filesystem access.
+  </Card>
+  <Card title="Permissions" icon="shield" href="/configuration/permissions">
+    Control which file operations require confirmation.
+  </Card>
+  <Card title="Configuration" icon="gear" href="/configuration/tools">
+    Full toolset configuration reference.
+  </Card>
+</CardGroup>

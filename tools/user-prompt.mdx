@@ -1,0 +1,143 @@
+---
+title: "User prompt"
+description: "Pause execution and ask the user a question interactively."
+---
+
+The user prompt tool allows agents to ask questions and collect input from users during execution. This enables interactive workflows where the agent needs clarification, confirmation, or additional information before proceeding.
+
+## Configuration
+
+```yaml
+toolsets:
+  - type: user_prompt
+```
+
+The user prompt tool has no configuration options.
+
+## When to use it
+
+- When the agent needs clarification before proceeding with a destructive or irreversible action
+- Collecting credentials, tokens, or configuration values at runtime
+- Presenting choices and getting the user's decision
+- Confirming important actions before executing them
+
+## Tool parameters
+
+When the agent calls `user_prompt`, it passes:
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `message` | string | Yes | The question or prompt text to display to the user. |
+| `schema` | object | No | JSON Schema defining the expected shape of the response. |
+
+## Response format
+
+The tool returns a JSON object:
+
+```json
+{
+  "action": "accept",
+  "content": {
+    "field1": "user value",
+    "field2": true
+  }
+}
+```
+
+| Action | Meaning |
+| --- | --- |
+| `accept` | The user provided a response. Check `content` for the value. |
+| `decline` | The user declined to answer. |
+| `cancel` | The user cancelled the prompt. |
+
+The agent should handle all three cases gracefully.
+
+## Schema examples
+
+<CodeGroup>
+
+```json Simple string
+{
+  "type": "string",
+  "title": "API Key",
+  "description": "Enter your API key"
+}
+```
+
+```json Multiple choice
+{
+  "type": "string",
+  "enum": ["development", "staging", "production"],
+  "title": "Environment",
+  "description": "Select the target environment"
+}
+```
+
+```json Boolean confirmation
+{
+  "type": "boolean",
+  "title": "Confirm",
+  "description": "Are you sure you want to proceed?"
+}
+```
+
+```json Object with fields
+{
+  "type": "object",
+  "properties": {
+    "username": { "type": "string" },
+    "password": { "type": "string" }
+  },
+  "required": ["username", "password"]
+}
+```
+
+</CodeGroup>
+
+## Example agent
+
+```yaml agent.yaml
+agents:
+  assistant:
+    model: openai/gpt-4o
+    description: Interactive deployment assistant
+    instruction: |
+      You are a deployment assistant. Before deploying:
+      1. Ask the user which environment to deploy to.
+      2. Ask the user to confirm before proceeding.
+      If the user declines or cancels, abort and explain what would have happened.
+    toolsets:
+      - type: user_prompt
+      - type: shell
+```
+
+## UI presentation
+
+How the prompt appears depends on the interface:
+
+| Interface | Behavior |
+| --- | --- |
+| **TUI** | Displays an interactive dialog with appropriate input controls. |
+| **CLI (exec mode)** | Prints the prompt and reads a response from stdin. |
+| **API / MCP** | Returns an elicitation request to the client. |
+
+<Warning>
+  The user prompt tool requires an elicitation handler. It works in the TUI and CLI (`--exec`) modes. Availability in API or MCP mode depends on whether the client supports elicitation.
+</Warning>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Shell" icon="terminal" href="/tools/shell">
+    Execute commands after collecting user input.
+  </Card>
+  <Card title="Think" icon="brain" href="/tools/think">
+    Reason about the user's response before acting.
+  </Card>
+  <Card title="Permissions" icon="shield" href="/configuration/permissions">
+    Require confirmation for specific tool calls.
+  </Card>
+  <Card title="Features: TUI" icon="monitor" href="/features/tui">
+    Learn about the interactive terminal UI.
+  </Card>
+</CardGroup>

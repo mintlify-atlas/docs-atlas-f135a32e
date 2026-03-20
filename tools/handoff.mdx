@@ -1,0 +1,132 @@
+---
+title: "Handoff"
+description: "Transfer the conversation to another agent in the same configuration."
+---
+
+The handoff tool enables agents to pass the conversation to a different agent defined in the same configuration file. Unlike [transfer_task](/tools/transfer-task) — which delegates a sub-task and returns the result to the caller — a handoff transfers full conversational control. The receiving agent takes over and can hand off further.
+
+This pattern is useful for routing workflows, where a coordinator decides which specialist should own the conversation.
+
+## Configuration
+
+Handoffs are configured at the agent level, not as a toolset. Add a `handoffs` list to declare which agents this agent can hand off to:
+
+```yaml
+agents:
+  root:
+    model: anthropic/claude-sonnet-4-5
+    description: Search coordinator
+    instruction: Route queries to the appropriate search agent.
+    handoffs:
+      - web_search
+      - filesystem_search
+
+  web_search:
+    model: openai/gpt-4o
+    description: Web search specialist
+    instruction: Search the web and hand off to the summarizer.
+    toolsets:
+      - type: mcp
+        ref: docker:duckduckgo
+    handoffs:
+      - summarizer
+
+  summarizer:
+    model: anthropic/claude-sonnet-4-5
+    description: Presents search results clearly
+    instruction: Summarize the findings and hand back to root.
+    handoffs:
+      - root
+```
+
+The `handoff` tool is automatically added to each agent that has a `handoffs` list. You do not add it manually as a toolset.
+
+## Handoff tool parameters
+
+When the agent calls `handoff`, it passes:
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `agent` | string | Yes | The name of the agent to hand off to (must be in `handoffs` list). |
+
+## Full example
+
+The following example shows a multi-agent workflow where a coordinator routes between web search and filesystem search, with redaction, tabulation, and summarization steps:
+
+```yaml handoff.yaml
+agents:
+  root:
+    model: anthropic/claude-sonnet-4-5
+    description: Search coordinator
+    instruction: |
+      Route queries to web_search or filesystem_search based on the user's request.
+    handoffs:
+      - web_search
+      - filesystem_search
+
+  web_search:
+    model: openai/gpt-4o
+    description: Web search specialist
+    toolsets:
+      - type: mcp
+        ref: docker:duckduckgo
+    handoffs:
+      - summarizer
+
+  filesystem_search:
+    model: openai/gpt-4o
+    description: Filesystem search specialist
+    toolsets:
+      - type: filesystem
+    handoffs:
+      - tabulator
+      - redactor
+
+  redactor:
+    model: openai/gpt-4o-mini
+    description: Redacts sensitive information from file contents
+    instruction: Replace API keys, passwords, and secrets with [REDACTED].
+    handoffs:
+      - tabulator
+
+  tabulator:
+    model: openai/gpt-4o-mini
+    description: Formats data into markdown tables
+    handoffs:
+      - summarizer
+
+  summarizer:
+    model: anthropic/claude-sonnet-4-5
+    description: Presents results clearly to the user
+    handoffs:
+      - root
+```
+
+## Handoff vs. transfer task vs. background agents
+
+| | `handoff` | `transfer_task` | `background_agents` |
+| --- | --- | --- | --- |
+| **Control flow** | Transfers ownership — calling agent exits | Returns result to caller | Caller continues while sub-agent runs |
+| **Best for** | Routing workflows, pipelines | Delegating to a specialist | Fan-out parallel work |
+| **Configuration** | `handoffs` list on the agent | `sub_agents` list | `sub_agents` list |
+
+<Tip>
+  See [A2A Protocol](/features/a2a) for details on serving agents as A2A endpoints and connecting to remote agents via the [handoff tool](/tools/handoff) or [a2a tool](/tools/a2a).
+</Tip>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Transfer task" icon="arrow-right" href="/tools/transfer-task">
+    Delegate a task and receive the result.
+  </Card>
+  <Card title="A2A tool" icon="link" href="/tools/a2a">
+    Connect to remote agents via A2A.
+  </Card>
+  <Card title="Multi-agent" icon="network" href="/concepts/multi-agent">
+    Multi-agent architecture patterns.
+  </Card>
+  <Card title="A2A protocol" icon="globe" href="/features/a2a">
+    Serve and consume A2A-compatible agents.
+  </Card>
+</CardGroup>
